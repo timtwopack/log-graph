@@ -12,7 +12,7 @@ parser.worker.js          worker парсера
 trace.worker.js           worker подготовки рядов
 dist/server/              основной portable runtime для локального сервера
 dist/single-file/         опциональный аварийный standalone HTML
-log-graph-v091.html       root-копия standalone HTML, не штатный режим
+log-graph-v091.html       генерируемая root-копия standalone HTML, не штатный режим и не source-of-truth
 ```
 
 Собрать артефакты:
@@ -31,6 +31,8 @@ python -m http.server 8080
 
 Статическая раздача обязательна для предсказуемой работы workers (`parser.worker.js`, `trace.worker.js`). Прямое открытие standalone HTML остаётся только аварийным вариантом, когда запуск локального сервера запрещён политикой объекта.
 
+Единственный source-of-truth для runtime — `src/index.template.html`, `src/styles.css`, `src/app.js` и два worker-файла. `dist/server`, `dist/single-file` и корневой `log-graph-v091.html` пересобираются командой `npm run build`; руками их не править. В `dist/server/build-manifest.json` записываются SHA-256 исходников, а `npm test` проверяет, что server-HTML подключает внешний `app.js`, а standalone действительно содержит текущий исходник.
+
 ### Минимальный переносимый комплект
 
 Для работы графопостроителя на другом ПК нужны только runtime-файлы:
@@ -42,6 +44,7 @@ styles.css
 app.js
 parser.worker.js
 trace.worker.js
+build-manifest.json
 vendor/
   plotly-3.5.0.min.js
 ```
@@ -102,6 +105,11 @@ npm test
 - парсинг wide-лога на приложенном sample;
 - сохранение `status` в grouped-формате;
 - декодирование Windows-1251;
+- приоритет epoch-времени над wall-clock колонками, если epoch есть;
+- ограничение параллельного чтения файлов до 1-2 задач, чтобы не взрывать память на больших логах;
+- маркировку merge-конфликтов по одинаковым `tag + timestamp`;
+- точечную замену только нужных ячеек header при сохранении переименованных тегов;
+- целостность server/standalone артефактов после сборки;
 - escaping CSV;
 - отсутствие интерполяции в raw-long CSV;
 - синтаксис и базовую работу workers.

@@ -11,14 +11,15 @@ add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment
 add_header Cross-Origin-Opener-Policy "same-origin" always;
 add_header Cross-Origin-Resource-Policy "same-origin" always;
 
-# Plotly is currently loaded from local vendor/ and the app has inline script/style.
-# A strict no-inline CSP requires a build step with externalized scripts/styles.
+# dist/server loads Plotly/app/styles from local files, but the HTML template still has inline handlers/styles.
+# A strict no-inline CSP requires a UI refactor to move onclick/style attributes to JS/CSS.
 add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" always;
 ```
 
 ## Notes
 
-- `worker-src 'self' blob:` is required for `parser.worker.js`, `trace.worker.js`, and direct-file fallback workers.
+- `dist/server` is the supported runtime; root `log-graph-v091.html` and `dist/single-file` are generated standalone fallbacks.
+- `worker-src 'self' blob:` is required for `parser.worker.js`, `trace.worker.js`, and fallback workers.
 - `img-src blob: data:` is required for PNG export and Plotly image generation.
 - `connect-src 'none'` documents the intended no-network posture.
-- Removing `'unsafe-inline'` requires moving the inline script and style blocks out of `log-graph-v091.html`.
+- Removing `'unsafe-inline'` requires replacing inline `onclick`/`style` attributes with `addEventListener` and CSS classes.

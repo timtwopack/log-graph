@@ -2,9 +2,10 @@
 
 ## Local Launch
 
-Direct browser opening still works for `log-graph-v091.html`. For full worker coverage, serve the folder as static files:
+Build first, then serve `dist/server` as static files. Direct browser opening is only the generated standalone fallback.
 
 ```bash
+cd dist/server
 python -m http.server 8080
 ```
 
@@ -46,6 +47,7 @@ Use `Сессия -> Диагностика JSON` to export local diagnostics. T
 - loaded file names;
 - parameter counts and point counts;
 - bad-quality point counts;
+- time-source and merge-conflict counts;
 - recent performance samples;
 - runtime errors captured locally;
 - browser storage estimate when supported.
@@ -56,8 +58,9 @@ No diagnostics are sent over the network by the app.
 
 1. Run `npm test`.
 2. Open the app through a local static server.
-3. Load `data_base/22-02-2026_12-00_OPRCH_v4_.txt`.
+3. Load `data_base/test_base.txt` from a clean checkout, or a real plant log during local acceptance.
 4. Verify first three parameters render.
-5. Export `CSV сырой long` and confirm `°C` and epoch µs are preserved.
+5. Export `CSV сырой long` and confirm `°C`, epoch µs, time source, and merge-conflict columns are preserved.
 6. Save a browser session and export a session file.
 7. Reload the page and import the session file.
+8. Check `dist/server/build-manifest.json`; the SHA-256 for `src/app.js` must match the current checkout.

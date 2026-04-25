@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import vm from 'node:vm';
 
 const appSource = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
+const styleSource = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const rootHtml = readFileSync(new URL('../log-graph-v091.html', import.meta.url), 'utf8');
 const serverHtml = readFileSync(new URL('../dist/server/log-graph-v091.html', import.meta.url), 'utf8');
+const buildManifest = JSON.parse(readFileSync(new URL('../dist/server/build-manifest.json', import.meta.url), 'utf8'));
 
 function mainScript() {
   return appSource;
@@ -35,6 +38,10 @@ function loadCore(names, prefix = '') {
   return new Function('TextDecoder', 'TextEncoder', code)(TextDecoder, TextEncoder);
 }
 
+function sha256(textOrBuffer) {
+  return createHash('sha256').update(textOrBuffer).digest('hex');
+}
+
 test('main inline script is syntactically valid', () => {
   new Function(mainScript());
 });
@@ -42,9 +49,19 @@ test('main inline script is syntactically valid', () => {
 test('build emits server and standalone variants', () => {
   assert.match(serverHtml, /<link rel="stylesheet" href="styles\.css" \/>/);
   assert.match(serverHtml, /<script src="app\.js"><\/script>/);
+  assert.doesNotMatch(serverHtml, /function parseTextCore/);
   assert.match(rootHtml, /<style>/);
   assert.match(rootHtml, /vendor\/plotly-3\.5\.0\.min\.js|plotly\.js v/i);
   assert.match(rootHtml, /function parseTextCore/);
+});
+
+test('build manifest and standalone embed the current source files', () => {
+  assert.equal(buildManifest.entrypoint, 'log-graph-v091.html');
+  assert.equal(buildManifest.sources['src/index.template.html'], sha256(serverHtml));
+  assert.equal(buildManifest.sources['src/styles.css'], sha256(styleSource));
+  assert.equal(buildManifest.sources['src/app.js'], sha256(appSource));
+  assert.ok(rootHtml.includes(styleSource));
+  assert.ok(rootHtml.includes(appSource));
 });
 
 test('external parser worker is syntactically valid', () => {
@@ -120,11 +137,12 @@ test('parser handles sample wide log and strips hidden bidi controls', () => {
     'stripBom',
     'normalizeYear',
     'epochToMs',
+    'wallClockTimestampFromParts',
     'timestampFromParts',
     'shortNameFromTag',
     'parseTextCore'
   ]);
-  const sample = readFileSync(new URL('../data_base/22-02-2026_12-00_OPRCH_v4_.txt', import.meta.url), 'utf8');
+  const sample = readFileSync(new URL('../data_base/test_base.txt', import.meta.url), 'utf8');
   const parsed = core.parseTextCore(sample);
   assert.equal(parsed.e, null);
   assert.ok(parsed.p.length >= 10);
@@ -141,6 +159,7 @@ test('grouped parser preserves status column per point', () => {
     'stripBom',
     'normalizeYear',
     'epochToMs',
+    'wallClockTimestampFromParts',
     'timestampFromParts',
     'shortNameFromTag',
     'parseTextCore'
@@ -156,6 +175,64 @@ test('grouped parser preserves status column per point', () => {
   assert.equal(parsed.p.length, 1);
   assert.equal(parsed.p[0].data[0].status, 'GOOD');
   assert.equal(parsed.p[0].data[1].status, 'SUBSTITUTED');
+});
+
+test('grouped parser accepts English Date/Time headers', () => {
+  const core = loadCore([
+    'stripImportedControlChars',
+    'cleanCell',
+    'stripBom',
+    'normalizeYear',
+    'epochToMs',
+    'wallClockTimestampFromParts',
+    'timestampFromParts',
+    'shortNameFromTag',
+    'parseTextCore'
+  ]);
+  const text = [
+    '%PAHEADER%',
+    'Date TAG2 [bar]\tTime TAG2 [bar]\tms\tstatus\tvalue',
+    '22.02.2026\t12:00:00\t000\tGOOD\t1,25'
+  ].join('\n');
+  const parsed = core.parseTextCore(text);
+  assert.equal(parsed.e, null);
+  assert.equal(parsed.p.length, 1);
+  assert.equal(parsed.p[0].tag, 'TAG2 [bar]');
+  assert.equal(parsed.p[0].data[0].status, 'GOOD');
+});
+
+test('epoch timestamp is the source of truth when present', () => {
+  const core = loadCore(['normalizeYear', 'epochToMs', 'wallClockTimestampFromParts', 'timestampFromParts']);
+  const epochUs = '1774155600000000';
+  assert.equal(core.timestampFromParts('01-01-2000', '00:00:00', '000', epochUs), core.epochToMs(epochUs));
+  assert.equal(core.timestampFromParts('22-03-2026', '12:00:00', '000', ''), core.wallClockTimestampFromParts('22-03-2026', '12:00:00', '000'));
+});
+
+test('file parsing is bounded to one or two concurrent files', () => {
+  const core = loadCore(['chooseFileParseConcurrency']);
+  assert.equal(core.chooseFileParseConcurrency([]), 0);
+  assert.equal(core.chooseFileParseConcurrency([{size: 10}, {size: 20}, {size: 30}]), 2);
+  assert.equal(core.chooseFileParseConcurrency([{size: 51 * 1024 * 1024}, {size: 20}]), 1);
+});
+
+test('merge policy keeps conflicting same-timestamp values and marks them', () => {
+  const core = loadCore(
+    ['ensureParamColor', 'mergeParsedParams'],
+    'const S={style:{PC:{}}}; const PAL=["#38bdf8"];'
+  );
+  const existing = [{tag: 'TAG', unit: 'bar', sourceFile: 'a.txt', dc: 0, tc: 1, mc: 2, sc: -1, ec: -1, vc: 3, data: [{ts: 1000, val: 1, sourceFile: 'a.txt'}]}];
+  const incoming = [{tag: 'TAG', unit: 'bar', sourceFile: 'b.txt', dc: 0, tc: 1, mc: 2, sc: -1, ec: -1, vc: 3, data: [{ts: 1000, val: 2, sourceFile: 'b.txt'}]}];
+  const res = core.mergeParsedParams(incoming, existing);
+  assert.equal(res.conflicts, 1);
+  assert.equal(res.p[0].data.length, 2);
+  assert.equal(res.p[0].data.filter(d => d.mergeConflict).length, 2);
+});
+
+test('save-with-rename only edits matching header cells', () => {
+  const core = loadCore(['stripImportedControlChars', 'cleanCell', 'replaceHeaderTagCell']);
+  assert.equal(core.replaceHeaderTagCell('TAG_A [bar]', 'TAG_A [bar]', 'TAG_B [bar]'), 'TAG_B [bar]');
+  assert.equal(core.replaceHeaderTagCell('Дата TAG_A [bar]', 'TAG_A [bar]', 'TAG_B [bar]'), 'Дата TAG_B [bar]');
+  assert.equal(core.replaceHeaderTagCell('COMMENT TAG_A [bar] COMMENT', 'TAG_A [bar]', 'TAG_B [bar]'), 'COMMENT TAG_A [bar] COMMENT');
 });
 
 test('signal kind detection separates binary, step, and analog series', () => {

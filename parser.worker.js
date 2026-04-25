@@ -82,7 +82,7 @@ function epochToMs(raw){
   if(Math.abs(n) >= 1e12) return Math.trunc(n);
   return Math.trunc(n * 1000);
 }
-function timestampFromParts(ds, ts, ms, epochRaw){
+function wallClockTimestampFromParts(ds, ts, ms){
   const dm = ds.match(/(\d{2})[.-](\d{2})[.-](\d{4}|\d{2})/);
   if(!dm) return null;
   const tm = ts.match(/(\d{2}):(\d{2}):(\d{2})/);
@@ -90,8 +90,12 @@ function timestampFromParts(ds, ts, ms, epochRaw){
   const year = normalizeYear(dm[3]);
   if(year === null) return null;
   const msv = parseInt(ms, 10) || 0;
-  void epochRaw;
   return new Date(year, parseInt(dm[2], 10) - 1, parseInt(dm[1], 10), parseInt(tm[1], 10), parseInt(tm[2], 10), parseInt(tm[3], 10), msv).getTime();
+}
+function timestampFromParts(ds, ts, ms, epochRaw){
+  const epochMs = epochToMs(epochRaw);
+  if(epochMs !== null) return epochMs;
+  return wallClockTimestampFromParts(ds, ts, ms);
 }
 function shortNameFromTag(tag){
   let shortName = tag;
@@ -127,14 +131,14 @@ function parseTextCore(text){
   while(col < hp.length){
     const h = cleanCell(hp[col]);
     if(!h){ col++; continue; }
-    const m = h.match(/^Дата\s+(.+)/);
+    const m = h.match(/^(?:Дата|Date)\s+(.+)/i);
     if(m && col + 4 < hp.length){
       const tag = cleanCell(m[1]);
       const nextH = cleanCell(hp[col + 1]);
-      if(nextH.indexOf('Время') === 0 && nextH.indexOf(tag) !== -1){
+      if(/^(?:Время|Time)(?:\s|$)/i.test(nextH) && nextH.indexOf(tag) !== -1){
         const unitM = tag.match(/\[([^\]]+)\]\s*$/);
         const unit = unitM ? cleanCell(unitM[1]) : '';
-        params.push({tag, originalTag: tag, shortName: shortNameFromTag(tag), unit, sourceFile: '', dc: col, tc: col + 1, mc: col + 2, sc: col + 3, ec: -1, vc: col + 4, data: [], cn: '', merged: false, timezone: 'local'});
+        params.push({tag, originalTag: tag, shortName: shortNameFromTag(tag), unit, sourceFile: '', dc: col, tc: col + 1, mc: col + 2, sc: col + 3, ec: -1, vc: col + 4, data: [], cn: '', merged: false, timezone: 'local', timeSource: 'local'});
         col += 5;
         continue;
       }
@@ -170,7 +174,7 @@ function parseTextCore(text){
       if(!raw) continue;
       const unitM = raw.match(/\[([^\]]+)\]\s*$/);
       const unit = unitM ? cleanCell(unitM[1]) : '';
-      params.push({tag: raw, originalTag: raw, shortName: shortNameFromTag(raw), unit, sourceFile: '', dc: 0, tc: 1, mc: 2, sc: -1, ec: epochCol, vc, data: [], cn: '', merged: false, _wide: true, timezone: epochCol >= 0 ? 'local+epoch' : 'local'});
+      params.push({tag: raw, originalTag: raw, shortName: shortNameFromTag(raw), unit, sourceFile: '', dc: 0, tc: 1, mc: 2, sc: -1, ec: epochCol, vc, data: [], cn: '', merged: false, _wide: true, timezone: epochCol >= 0 ? 'epoch' : 'local', timeSource: epochCol >= 0 ? 'epoch' : 'local'});
     }
     if(!params.length) return {p: [], e: 'Не найдены колонки параметров'};
   }
@@ -195,7 +199,12 @@ function parseTextCore(text){
         if(epochMs !== null){
           point.epochUs = Math.trunc(epochMs * 1000);
           point.epochRaw = epochRaw;
+          point.timeSource = 'epoch';
+        }else{
+          point.timeSource = 'local';
         }
+      }else{
+        point.timeSource = 'local';
       }
       pr.data.push(point);
     }

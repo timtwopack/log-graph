@@ -6,7 +6,11 @@
 - Moved file decoding/parsing to `parser.worker.js` for static-server runs, with inline blob fallback for direct file opening.
 - Added optional `trace.worker.js` precompute path for initial downsampling/cache warmup.
 - Preserved grouped-format `status` values per point.
-- Preserved optional epoch timestamp as `epochUs` while keeping the UI on the local timestamp columns.
+- Preserved optional epoch timestamp as `epochUs` and use it as the timestamp source of truth; local date/time columns remain the fallback.
+- Bounded multi-file loading to one or two concurrent parse jobs to reduce large-log memory peaks.
+- Preserve and mark same-`tag + timestamp` conflicts with different values/status as merge conflicts.
+- Save-with-rename now edits only exact header cells instead of replacing every matching substring in the header line.
+- Grouped parser accepts both Russian `Дата/Время` and English `Date/Time` headers.
 - Added `signalKind` (`analog`, `binary`, `step`, `setpoint`) and per-parameter override in the sidebar.
 - Added quality filter for excluding non-good status points from charts, statistics, smoothing, and anomaly detection.
 - Replaced ambiguous raw CSV with `raw-long` export that contains only original points and no interpolation.
@@ -18,4 +22,5 @@
 - Added Node test suite and GitHub Actions workflow.
 - Added `src/`, `dist/server`, and `dist/single-file` structure.
 - Added `tools/build.mjs` to build the primary server runtime and optional standalone HTML.
+- Added `build-manifest.json` with SHA-256 input hashes and tests that guard against source/server/standalone drift.
 - Portable zip now contains only the supported server runtime by default; standalone is included only with `-IncludeStandalone`.

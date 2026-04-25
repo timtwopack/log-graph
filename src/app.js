@@ -265,8 +265,10 @@ function exportDiagnostics(){
       unit: p.unit || '',
       rawUnit: p.rawUnit || '',
       signalKind: signalKindOf(p),
+      timeSource: p.timeSource || p.timezone || 'local',
       sourceFile: p.sourceFile || '',
-      badQuality: p.data.filter(d => isBadQuality(d.status)).length
+      badQuality: p.data.filter(d => isBadQuality(d.status)).length,
+      mergeConflicts: p.data.filter(d => d.mergeConflict).length
     })),
     lastLoadSummary: S.runtime._lastLoadSummary,
     perf: S.runtime.PERF.slice(),
@@ -1214,7 +1216,7 @@ function epochToMs(raw){
   if(Math.abs(n) >= 1e12) return Math.trunc(n);        /* milliseconds */
   return Math.trunc(n * 1000);                         /* seconds */
 }
-function timestampFromParts(ds, ts, ms, epochRaw){
+function wallClockTimestampFromParts(ds, ts, ms){
   const dm = ds.match(/(\d{2})[.-](\d{2})[.-](\d{4}|\d{2})/);
   if(!dm) return null;
   const tm = ts.match(/(\d{2}):(\d{2}):(\d{2})/);
@@ -1222,8 +1224,12 @@ function timestampFromParts(ds, ts, ms, epochRaw){
   const year = normalizeYear(dm[3]);
   if(year === null) return null;
   const msv = parseInt(ms, 10) || 0;
-  void epochRaw;
   return new Date(year, parseInt(dm[2], 10) - 1, parseInt(dm[1], 10), parseInt(tm[1], 10), parseInt(tm[2], 10), parseInt(tm[3], 10), msv).getTime();
+}
+function timestampFromParts(ds, ts, ms, epochRaw){
+  const epochMs = epochToMs(epochRaw);
+  if(epochMs !== null) return epochMs;
+  return wallClockTimestampFromParts(ds, ts, ms);
 }
 function shortNameFromTag(tag){
   let shortName = tag;
@@ -1258,14 +1264,14 @@ function parseTextCore(text){
       col++;
       continue;
     }
-    const m = h.match(/^Дата\s+(.+)/);
+    const m = h.match(/^(?:Дата|Date)\s+(.+)/i);
     if(m && col + 4 < hp.length){
       const tag = cleanCell(m[1]);
       const nextH = cleanCell(hp[col + 1]);
-      if(nextH.indexOf('Время') === 0 && nextH.indexOf(tag) !== -1){
+      if(/^(?:Время|Time)(?:\s|$)/i.test(nextH) && nextH.indexOf(tag) !== -1){
         const unitM = tag.match(/\[([^\]]+)\]\s*$/);
         const unit = unitM ? cleanCell(unitM[1]) : '';
-        params.push({tag, originalTag: tag, shortName: shortNameFromTag(tag), unit, sourceFile: '', dc: col, tc: col + 1, mc: col + 2, sc: col + 3, ec: -1, vc: col + 4, data: [], cn: '', merged: false, timezone: 'local'});
+        params.push({tag, originalTag: tag, shortName: shortNameFromTag(tag), unit, sourceFile: '', dc: col, tc: col + 1, mc: col + 2, sc: col + 3, ec: -1, vc: col + 4, data: [], cn: '', merged: false, timezone: 'local', timeSource: 'local'});
         col += 5;
         continue;
       }
@@ -1304,7 +1310,7 @@ function parseTextCore(text){
       if(!raw) continue;
       const unitM = raw.match(/\[([^\]]+)\]\s*$/);
       const unit = unitM ? cleanCell(unitM[1]) : '';
-      params.push({tag: raw, originalTag: raw, shortName: shortNameFromTag(raw), unit, sourceFile: '', dc: 0, tc: 1, mc: 2, sc: -1, ec: epochCol, vc: vc, data: [], cn: '', merged: false, _wide: true, timezone: epochCol >= 0 ? 'local+epoch' : 'local'});
+      params.push({tag: raw, originalTag: raw, shortName: shortNameFromTag(raw), unit, sourceFile: '', dc: 0, tc: 1, mc: 2, sc: -1, ec: epochCol, vc: vc, data: [], cn: '', merged: false, _wide: true, timezone: epochCol >= 0 ? 'epoch' : 'local', timeSource: epochCol >= 0 ? 'epoch' : 'local'});
     }
 
     if(!params.length) return {p: [], e: 'Не найдены колонки параметров'};
@@ -1333,7 +1339,12 @@ function parseTextCore(text){
         if(epochMs !== null){
           point.epochUs = Math.trunc(epochMs * 1000);
           point.epochRaw = epochRaw;
+          point.timeSource = 'epoch';
+        }else{
+          point.timeSource = 'local';
         }
+      }else{
+        point.timeSource = 'local';
       }
       pr.data.push(point);
     }
@@ -1349,7 +1360,7 @@ function ensureParamColor(p){
 }
 function mergeParsedParams(params, ex){
   params.forEach(ensureParamColor);
-  if(!ex || !ex.length) return {p: params, e: null};
+  if(!ex || !ex.length) return {p: params, e: null, conflicts: 0};
 
   const em = {};
   for(const item of ex) em[item.tag] = item;
@@ -1367,9 +1378,25 @@ function mergeParsedParams(params, ex){
         const key = item.ts + '_' + item.val + '_' + (item.status || '');
         if(seen.has(key)) continue;
         seen.add(key);
-        d2.push(item);
+        const copy = Object.assign({}, item);
+        delete copy.mergeConflict;
+        d2.push(copy);
       }
       d2.sort((a, b) => a.ts - b.ts);
+      let conflictGroups = 0;
+      const byTs = new Map();
+      for(const item of d2){
+        const key = String(item.ts);
+        if(!byTs.has(key)) byTs.set(key, []);
+        byTs.get(key).push(item);
+      }
+      for(const group of byTs.values()){
+        if(group.length < 2) continue;
+        const signatures = new Set(group.map(item => item.val + '_' + (item.status || '')));
+        if(signatures.size < 2) continue;
+        conflictGroups++;
+        group.forEach(item => { item.mergeConflict = true; });
+      }
       const files = Array.from(new Set([ep.sourceFile, pr2.sourceFile].filter(Boolean)));
       mg.push(Object.assign({}, ep, {
         unit: ep.unit || pr2.unit || '',
@@ -1378,7 +1405,9 @@ function mergeParsedParams(params, ex){
         vc: ep.vc,
         data: d2,
         merged: true,
-        timezone: ep.timezone || pr2.timezone || 'local'
+        timezone: ep.timezone || pr2.timezone || 'local',
+        timeSource: ep.timeSource || pr2.timeSource || ep.timezone || pr2.timezone || 'local',
+        mergeConflicts: conflictGroups
       }));
     }else{
       mg.push(pr2);
@@ -1387,7 +1416,7 @@ function mergeParsedParams(params, ex){
   for(const oldItem of ex){
     if(!used[oldItem.tag]) mg.push(oldItem);
   }
-  return {p: mg, e: null};
+  return {p: mg, e: null, conflicts: mg.reduce((sum, p) => sum + (p.mergeConflicts || 0), 0)};
 }
 function parse(text, ex){
   const parsed = parseTextCore(text);
@@ -1405,6 +1434,7 @@ function parserWorkerScript(){
     decodeBytesSmart.toString(),
     normalizeYear.toString(),
     epochToMs.toString(),
+    wallClockTimestampFromParts.toString(),
     timestampFromParts.toString(),
     shortNameFromTag.toString(),
     parseTextCore.toString(),
@@ -1467,6 +1497,41 @@ async function parseFilePayload(file){
   const parsed = parseTextCore(decoded.text);
   if(parsed.e) throw new Error(parsed.e);
   return {file, text: decoded.text, encoding: decoded.encoding, bom: !!decoded.bom, headerIdx: headerIndexFromText(decoded.text), params: parsed.p};
+}
+function chooseFileParseConcurrency(files){
+  const arr = Array.from(files || []);
+  if(!arr.length) return 0;
+  const largeThreshold = 50 * 1024 * 1024;
+  return arr.some(file => file.size >= largeThreshold) ? 1 : Math.min(2, arr.length);
+}
+async function parseFilesBounded(files){
+  const arr = Array.from(files || []);
+  const limit = chooseFileParseConcurrency(arr);
+  const loaded = new Array(arr.length);
+  let next = 0;
+  let done = 0;
+
+  async function runOne(){
+    while(next < arr.length){
+      const idx = next++;
+      const file = arr[idx];
+      setBusy(true, 'Чтение ' + (idx + 1) + '/' + arr.length + '...');
+      try{
+        const parsed = await parseFilePayload(file);
+        loaded[idx] = Object.assign(parsed, {error: null});
+      }catch(e){
+        loaded[idx] = {file, text: '', encoding: '', headerIdx: 0, params: [], error: e};
+      }finally{
+        done++;
+        setBusy(true, 'Обработано ' + done + '/' + arr.length + '...');
+      }
+    }
+  }
+
+  const workers = [];
+  for(let i = 0; i < limit; i++) workers.push(runOne());
+  await Promise.all(workers);
+  return loaded;
 }
 async function precomputeTraceCacheForParams(params){
   if(location.protocol === 'file:' || typeof Worker !== 'function' || !params || !params.length) return;
@@ -1535,14 +1600,7 @@ async function hf(fileList){
 
   setBusy(true, 'Чтение и парсинг...');
   try{
-    const loaded = await Promise.all(files.map(async file => {
-      try{
-        const parsed = await parseFilePayload(file);
-        return Object.assign(parsed, {error: null});
-      }catch(e){
-        return {file, text: '', encoding: '', headerIdx: 0, params: [], error: e};
-      }
-    }));
+    const loaded = await parseFilesBounded(files);
 
     let nextAP = S.data.AP.slice();
     const acceptedNames = [];
@@ -1562,6 +1620,9 @@ async function hf(fileList){
       if(res.e){
         warnings.push(item.file.name + ': ' + res.e);
         continue;
+      }
+      if(res.conflicts){
+        warnings.push(item.file.name + ': merge-конфликты по одинаковым tag+timestamp: ' + res.conflicts);
       }
       /* Store file text for later saving */
       S.data._fileStore[item.file.name] = { text: item.text, headerIdx: item.headerIdx || 0, encoding: item.encoding || 'utf-8', bom: !!item.bom };
@@ -2335,7 +2396,7 @@ function exportCSV(mode, encoding){
   if(!act.length) return;
 
   if(mode === 'raw' || mode === 'raw-long'){
-    const rows = [['Дата/Время', 'Epoch µs', 'Тег', 'Имя', 'Значение', 'Ед. изм.', 'Raw значение', 'Raw ед. изм.', 'Статус', 'Файл', 'Кодировка']];
+    const rows = [['Дата/Время', 'Epoch µs', 'Источник времени', 'Тег', 'Имя', 'Значение', 'Ед. изм.', 'Raw значение', 'Raw ед. изм.', 'Статус', 'Merge conflict', 'Файл', 'Кодировка']];
     const rawRows = [];
     for(const p of act){
       for(const d of p.data){
@@ -2344,6 +2405,7 @@ function exportCSV(mode, encoding){
           row: [
             fmtTsExcel(d.ts),
             d.epochRaw || (d.epochUs != null ? String(d.epochUs) : ''),
+            d.timeSource || p.timeSource || p.timezone || 'local',
             p.tag,
             pn(p),
             fmtNumExcel(d.val),
@@ -2351,6 +2413,7 @@ function exportCSV(mode, encoding){
             d.rawVal !== undefined ? fmtNumExcel(d.rawVal) : '',
             p.rawUnit || '',
             d.status || '',
+            d.mergeConflict ? 'yes' : '',
             d.sourceFile || p.sourceFile || '',
             d.sourceFile && S.data._fileStore[d.sourceFile] ? (S.data._fileStore[d.sourceFile].encoding || '') : (p.sourceFile && S.data._fileStore[p.sourceFile] ? (S.data._fileStore[p.sourceFile].encoding || '') : '')
           ]
@@ -2559,6 +2622,14 @@ function renameTagEverywhere(oldTag, newTag){
   S.markers.MARKERS.forEach(m => { if(m.tag === oldTag) m.tag = newTag; });
 }
 
+function replaceHeaderTagCell(cell, oldTag, newTag){
+  const cleaned = cleanCell(cell);
+  if(cleaned === oldTag) return newTag;
+  const grouped = cleaned.match(/^(Дата|Date|Время|Time)\s+(.+)$/i);
+  if(grouped && grouped[2] === oldTag) return grouped[1] + ' ' + newTag;
+  return cell;
+}
+
 function saveFile(filename){
   const fd = S.data._fileStore[filename];
   if(!fd){ showErr('Нет данных файла: ' + filename); return; }
@@ -2581,13 +2652,11 @@ function saveFile(filename){
 
   const lines = fd.text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
   const hi = fd.headerIdx;
-  let headerLine = lines[hi];
+  let headerCells = String(lines[hi] || '').split('\t');
 
   for(const r of renames){
     const {p, oldTag, newTag} = r;
-    const esc = oldTag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp(esc, 'g');
-    headerLine = headerLine.replace(re, newTag);
+    headerCells = headerCells.map(cell => replaceHeaderTagCell(cell, oldTag, newTag));
 
     /* Migrate all state BEFORE mutating p.tag/p.originalTag so the old keys are still findable. */
     renameTagEverywhere(oldTag, newTag);
@@ -2605,7 +2674,7 @@ function saveFile(filename){
     }
   }
 
-  lines[hi] = headerLine;
+  lines[hi] = headerCells.join('\t');
   const newText = lines.join('\n');
 
   /* Update stored text */
@@ -4441,6 +4510,8 @@ function validateSessionPayload(payload){
         : null,
       sourceFile: cleanImportString(p.sourceFile || '', 260),
       timezone: cleanImportString(p.timezone || 'local', 32),
+      timeSource: cleanImportString(p.timeSource || p.timezone || 'local', 32),
+      mergeConflicts: Number.isFinite(+p.mergeConflicts) ? +p.mergeConflicts : 0,
       merged: !!p.merged,
       isDiscrete: isStepSignal(p)
     });
@@ -4452,11 +4523,15 @@ function validateSessionPayload(payload){
       const hasStatus = Array.isArray(p.st);
       const hasEpoch = Array.isArray(p.ep);
       const hasRaw = Array.isArray(p.rv);
+      const hasTimeSource = Array.isArray(p.tsrc);
+      const hasMergeConflict = Array.isArray(p.mc);
       out.x = [];
       out.y = [];
       if(hasStatus) out.st = [];
       if(hasEpoch) out.ep = [];
       if(hasRaw) out.rv = [];
+      if(hasTimeSource) out.tsrc = [];
+      if(hasMergeConflict) out.mc = [];
       for(let i = 0; i < len; i++){
         const ts = Number(p.x[i]);
         const val = Number(p.y[i]);
@@ -4472,6 +4547,8 @@ function validateSessionPayload(payload){
           const rv = p.rv[i] == null ? null : Number(p.rv[i]);
           out.rv.push(Number.isFinite(rv) ? rv : null);
         }
+        if(hasTimeSource) out.tsrc.push(cleanImportString(p.tsrc[i] || '', 32));
+        if(hasMergeConflict) out.mc.push(!!p.mc[i]);
       }
     } else if(Array.isArray(p.data)){
       const data = [];
@@ -4486,6 +4563,8 @@ function validateSessionPayload(payload){
         const point = status ? {ts, val, status} : {ts, val};
         if(d.epochUs != null && Number.isFinite(Number(d.epochUs))) point.epochUs = Number(d.epochUs);
         if(d.rawVal !== undefined && Number.isFinite(Number(d.rawVal))) point.rawVal = Number(d.rawVal);
+        if(d.timeSource) point.timeSource = cleanImportString(d.timeSource, 32);
+        if(d.mergeConflict) point.mergeConflict = true;
         data.push(point);
       }
       out.data = data;
@@ -4532,12 +4611,16 @@ function snapshotSession(){
         rawUnit: p.rawUnit || '',
         rawLevels: p.rawLevels || null,
         timezone: p.timezone || 'local',
+        timeSource: p.timeSource || p.timezone || 'local',
+        mergeConflicts: p.mergeConflicts || p.data.filter(d => d.mergeConflict).length,
         x: p.data.map(d => d.ts),
         y: p.data.map(d => d.val)
       };
       if(p.data.some(d => d.status)) out.st = p.data.map(d => d.status || '');
       if(p.data.some(d => d.epochUs != null)) out.ep = p.data.map(d => d.epochUs != null ? d.epochUs : null);
       if(p.data.some(d => d.rawVal !== undefined)) out.rv = p.data.map(d => d.rawVal !== undefined ? d.rawVal : null);
+      if(p.data.some(d => d.timeSource)) out.tsrc = p.data.map(d => d.timeSource || '');
+      if(p.data.some(d => d.mergeConflict)) out.mc = p.data.map(d => !!d.mergeConflict);
       return out;
     }),
     fn: S.data.FN.slice(),
@@ -4602,9 +4685,11 @@ async function loadSession(name){
         data[i] = status ? {ts: p.x[i], val: p.y[i], status} : {ts: p.x[i], val: p.y[i]};
         if(Array.isArray(p.ep) && p.ep[i] != null) data[i].epochUs = p.ep[i];
         if(Array.isArray(p.rv) && p.rv[i] != null) data[i].rawVal = p.rv[i];
+        if(Array.isArray(p.tsrc) && p.tsrc[i]) data[i].timeSource = String(p.tsrc[i]);
+        if(Array.isArray(p.mc) && p.mc[i]) data[i].mergeConflict = true;
       }
       out.data = data;
-      delete out.x; delete out.y; delete out.st; delete out.ep; delete out.rv;
+      delete out.x; delete out.y; delete out.st; delete out.ep; delete out.rv; delete out.tsrc; delete out.mc;
     } else if(!Array.isArray(p.data)){
       out.data = [];
     }

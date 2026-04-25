@@ -1,4 +1,5 @@
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -37,6 +38,10 @@ function inlineStandalone({ template, styles, app, plotly }) {
     .replace('<script src="app.js"></script>', `<script>\n${app}\n</script>`);
 }
 
+function sha256(textOrBuffer) {
+  return createHash('sha256').update(textOrBuffer).digest('hex');
+}
+
 cleanDir(serverDir);
 cleanDir(singleDir);
 
@@ -52,6 +57,23 @@ copyFileSync(parserWorkerPath, join(serverDir, 'parser.worker.js'));
 copyFileSync(traceWorkerPath, join(serverDir, 'trace.worker.js'));
 ensureDir(join(serverDir, 'vendor'));
 copyFileSync(vendorPath, join(serverDir, 'vendor', 'plotly-3.5.0.min.js'));
+
+const parserWorker = readFileSync(parserWorkerPath);
+const traceWorker = readFileSync(traceWorkerPath);
+const plotlyBuffer = readFileSync(vendorPath);
+const manifest = {
+  entrypoint: 'log-graph-v091.html',
+  mode: 'static-server',
+  sources: {
+    'src/index.template.html': sha256(template),
+    'src/styles.css': sha256(styles),
+    'src/app.js': sha256(app),
+    'parser.worker.js': sha256(parserWorker),
+    'trace.worker.js': sha256(traceWorker),
+    'vendor/plotly-3.5.0.min.js': sha256(plotlyBuffer)
+  }
+};
+writeFileSync(join(serverDir, 'build-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 
 const standalone = inlineStandalone({ template, styles, app, plotly });
 writeFileSync(join(singleDir, 'log-graph-v091-standalone.html'), standalone);
