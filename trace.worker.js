@@ -1,0 +1,165 @@
+'use strict';
+
+function downsampleDiscrete(xArr, yArr){
+  if(xArr.length <= 2) return {x: xArr, y: yArr};
+  const sx = [xArr[0]], sy = [yArr[0]];
+  for(let i = 1; i < xArr.length; i++){
+    if(yArr[i] !== yArr[i - 1]){
+      if(sx[sx.length - 1] !== xArr[i - 1]){
+        sx.push(xArr[i - 1]); sy.push(yArr[i - 1]);
+      }
+      sx.push(xArr[i]); sy.push(yArr[i]);
+    }
+  }
+  if(sx[sx.length - 1] !== xArr[xArr.length - 1]){
+    sx.push(xArr[xArr.length - 1]); sy.push(yArr[yArr.length - 1]);
+  }
+  return {x: sx, y: sy};
+}
+function downsample(xArr, yArr, threshold){
+  const len = xArr.length;
+  if(threshold >= len || threshold <= 2) return {x: xArr, y: yArr};
+  const sx = [xArr[0]];
+  const sy = [yArr[0]];
+  const every = (len - 2) / (threshold - 2);
+  let a = 0;
+  for(let i = 0; i < threshold - 2; i++){
+    let s1 = Math.floor((i + 1) * every) + 1;
+    let s2 = Math.floor((i + 2) * every) + 1;
+    if(s2 > len) s2 = len;
+    let avgX = 0, avgY = 0;
+    const avgL = s2 - s1;
+    for(let j = s1; j < s2; j++){ avgX += xArr[j]; avgY += yArr[j]; }
+    avgX /= avgL;
+    avgY /= avgL;
+    let r1 = Math.floor(i * every) + 1;
+    let r2 = Math.floor((i + 1) * every) + 1;
+    if(r2 > len) r2 = len;
+    let maxA = -1, nextA = r1;
+    for(let j2 = r1; j2 < r2; j2++){
+      const area = Math.abs((xArr[a] - avgX) * (yArr[j2] - yArr[a]) - (xArr[a] - xArr[j2]) * (avgY - yArr[a]));
+      if(area > maxA){ maxA = area; nextA = j2; }
+    }
+    sx.push(xArr[nextA]); sy.push(yArr[nextA]); a = nextA;
+  }
+  sx.push(xArr[len - 1]); sy.push(yArr[len - 1]);
+  return {x: sx, y: sy};
+}
+function downsampleMinMax(xArr, yArr, threshold){
+  const len = xArr.length;
+  if(threshold >= len || threshold <= 2) return {x: xArr, y: yArr};
+  const buckets = Math.floor(threshold / 2);
+  const every = (len - 2) / buckets;
+  const sx = [xArr[0]], sy = [yArr[0]];
+  for(let i = 0; i < buckets; i++){
+    const s = Math.floor(i * every) + 1;
+    const e = Math.min(Math.floor((i + 1) * every) + 1, len);
+    if(s >= e) continue;
+    let mnI = s, mxI = s;
+    for(let j = s + 1; j < e; j++){
+      if(yArr[j] < yArr[mnI]) mnI = j;
+      if(yArr[j] > yArr[mxI]) mxI = j;
+    }
+    if(mnI === mxI){ sx.push(xArr[mnI]); sy.push(yArr[mnI]); }
+    else if(mnI < mxI){ sx.push(xArr[mnI]); sy.push(yArr[mnI]); sx.push(xArr[mxI]); sy.push(yArr[mxI]); }
+    else { sx.push(xArr[mxI]); sy.push(yArr[mxI]); sx.push(xArr[mnI]); sy.push(yArr[mnI]); }
+  }
+  sx.push(xArr[len - 1]); sy.push(yArr[len - 1]);
+  return {x: sx, y: sy};
+}
+function downsampleNth(xArr, yArr, threshold){
+  const len = xArr.length;
+  if(threshold >= len || threshold <= 2) return {x: xArr, y: yArr};
+  const step = (len - 1) / (threshold - 1);
+  const sx = [], sy = [];
+  for(let i = 0; i < threshold; i++){
+    const idx = Math.round(i * step);
+    sx.push(xArr[idx]); sy.push(yArr[idx]);
+  }
+  return {x: sx, y: sy};
+}
+function dsDispatch(xArr, yArr, threshold, alg){
+  if(alg === 'minmax') return downsampleMinMax(xArr, yArr, threshold);
+  if(alg === 'nth') return downsampleNth(xArr, yArr, threshold);
+  return downsample(xArr, yArr, threshold);
+}
+function isBadQuality(status){
+  const s = String(status == null ? '' : status).trim().toLowerCase();
+  if(!s) return false;
+  if(s === '0' || s === 'good' || s === 'ok' || s === 'valid' || s === 'норма' || s === 'норм') return false;
+  return true;
+}
+function isStepKind(k){
+  return k === 'binary' || k === 'step' || k === 'setpoint';
+}
+function prepareOne(req){
+  const p = req.param;
+  const view = req.view;
+  const stepSignal = isStepKind(p.signalKind) || !!p.isDiscrete;
+  const data = [];
+  for(const d of p.data){
+    if(view.tr && (d.ts < view.tr[0] || d.ts > view.tr[1])) continue;
+    if(view.qualityGoodOnly && isBadQuality(d.status)) continue;
+    data.push(d);
+  }
+  const xMsFull = new Array(data.length);
+  const yFull = new Array(data.length);
+  for(let i = 0; i < data.length; i++){ xMsFull[i] = data[i].ts; yFull[i] = data[i].val; }
+  const ds = stepSignal ? downsampleDiscrete(xMsFull, yFull) : dsDispatch(xMsFull, yFull, view.maxPts, view.dsAlg);
+  let xFinal = ds.x;
+  let yFinal = ds.y;
+  if(!view.cgaps && xFinal.length > 2){
+    const intervals = [];
+    for(let i = 1; i < xFinal.length; i++) intervals.push(xFinal[i] - xFinal[i - 1]);
+    const sorted = intervals.slice().sort((a, b) => a - b);
+    let maxRatio = 0, breakVal = Infinity;
+    for(let i = 1; i < sorted.length; i++){
+      if(sorted[i - 1] > 0){
+        const ratio = sorted[i] / sorted[i - 1];
+        if(ratio > maxRatio){ maxRatio = ratio; breakVal = sorted[i]; }
+      }
+    }
+    if(maxRatio >= 10){
+      const xGap = [xFinal[0]], yGap = [yFinal[0]];
+      for(let i = 1; i < xFinal.length; i++){
+        if(xFinal[i] - xFinal[i - 1] >= breakVal){
+          xGap.push(Math.round((xFinal[i - 1] + xFinal[i]) / 2));
+          yGap.push(null);
+        }
+        xGap.push(xFinal[i]); yGap.push(yFinal[i]);
+      }
+      xFinal = xGap; yFinal = yGap;
+    }
+  }
+  const xDisp = view.t0ms !== null ? xFinal.map(x => (x - view.t0ms) / 1000) : xFinal.slice();
+  return {
+    key: req.key,
+    data: {
+      name: p.name,
+      isDiscrete: stepSignal,
+      color: p.color,
+      xMs: xMsFull,
+      y: yFull,
+      xDisp,
+      xDispAreMs: view.t0ms === null,
+      yDisp: yFinal,
+      yOrig: null,
+      origLen: data.length,
+      dispLen: ds.x.length,
+      connectgaps: view.cgaps,
+      bollinger: null,
+      lw: p.lw,
+      ld: p.ld,
+      lineShape: stepSignal ? 'hv' : 'linear',
+      splineSmoothing: undefined
+    }
+  };
+}
+self.onmessage = function(e){
+  try{
+    const out = e.data.items.map(prepareOne);
+    self.postMessage({items: out, error: null});
+  }catch(err){
+    self.postMessage({items: [], error: err && err.message ? err.message : String(err)});
+  }
+};

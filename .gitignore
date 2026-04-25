@@ -1,0 +1,33 @@
+# Dependencies and package-manager state
+node_modules/
+
+# Build output and generated portable packages
+dist/
+*.zip
+log-graph-v091.html
+
+# Local input logs and plant data.
+# Keep the small sample used for local checks; do not commit real trip data by default.
+data_base/*
+!data_base/test_base.txt
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+.cache/
+.tmp/
+tmp/
+temp/
+
+# Local environment and editor state
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PA·GRAPH v0.9.0</title>
+<link rel="stylesheet" href="styles.css" />
+<!-- Fonts: using system fallbacks for offline mode -->
+</head>
+<body>
+<div id="loader"><div class="spin"></div><div class="st" id="lst">Инициализация...</div></div>
+<div id="app">
+  <div id="hdr">
+    <button class="b sidebar-toggle" id="bsidebar" onclick="togSidebar()">☰</button>
+    <div class="logo"><div class="dot" id="sdot"></div><span class="ttl">PA·GRAPH</span><span class="ver">v0.9.0</span></div>
+    <div id="fls"></div>
+    <div id="hdr-act">
+      <button class="b" id="bhelp" onclick="togHelp()" title="Справка (F1)">? Справка</button>
+      <button class="b" id="bthm" onclick="togTheme()">☀</button>
+      <button class="b" id="bmarkers" onclick="togMeasure()" title="Курсоры A/B для измерения диапазона (Δt, Min/Max/Avg)">📏 Измерение</button>
+      <button class="b s" id="bzback" onclick="zoomBack()" title="Откатить зум (Alt+←)" disabled>◀</button>
+      <button class="b s" id="bzfwd" onclick="zoomForward()" title="Повторить зум (Alt+→)" disabled>▶</button>
+      <div class="dd" id="ddexp">
+        <button class="b" onclick="togExportMenu()" title="Экспорт CSV / PNG">⬇ Экспорт ▾</button>
+        <div class="ddmenu" id="ddexpm">
+          <button class="ddi" onclick="exportCSV('raw-long');closeExportMenu()" title="Исходные точки без интерполяции: время, тег, значение, статус, файл">⬇ CSV сырой long</button>
+          <button class="ddi" onclick="exportCSV('aligned');closeExportMenu()" title="Выровненная таблица по объединённой временной сетке с интерполяцией">⬇ CSV выровненный</button>
+          <button class="ddi" onclick="exportCSV('thin');closeExportMenu()" title="Прореженные данные по текущему алгоритму">⬇ CSV прореженный</button>
+          <button class="ddi" onclick="exportCSV('visible');closeExportMenu()" title="Только текущий видимый диапазон оси X">⬇ CSV видимый</button>
+          <button class="ddi" onclick="exportCSV('raw-long','windows-1251');closeExportMenu()" title="Legacy-экспорт для старого Excel; часть Unicode заменяется ASCII">⬇ CSV сырой CP1251</button>
+          <div class="dds"></div>
+          <button class="ddi" onclick="exportPNG();closeExportMenu()" title="Экспорт PNG">⬇ PNG</button>
+        </div>
+      </div>
+      <div class="dd" id="ddsession">
+        <button class="b" onclick="togSessionMenu()" title="Сохранить / загрузить сессию">💾 Сессия ▾</button>
+        <div class="ddmenu" id="ddsessionm" style="min-width:260px">
+          <button class="ddi" onclick="saveSession();closeSessionMenu()" title="Сохранить текущее состояние и данные в браузер">💾 Сохранить в браузер…</button>
+          <button class="ddi" onclick="exportSessionToFile();closeSessionMenu()" title="Скачать текущую сессию как .pagraph.json файл">📤 Экспорт в файл</button>
+          <button class="ddi" onclick="importSessionFromFile();closeSessionMenu()" title="Загрузить сессию из .pagraph.json файла">📥 Импорт из файла…</button>
+          <button class="ddi" onclick="exportDiagnostics();closeSessionMenu()" title="Скачать локальный отчёт по ошибкам, производительности и загруженным данным">🧪 Диагностика JSON</button>
+          <div class="dds"></div>
+          <div id="sessionslots" style="max-height:240px;overflow-y:auto"></div>
+        </div>
+      </div>
+      <input type="file" id="sessionImport" accept=".json,.gz,.pagraph.json,.pagraph.json.gz,application/json,application/gzip" style="display:none" />
+      <button class="b ac" id="bopen" onclick="fi.click()">Открыть</button>
+      <button class="b dng" id="brst" style="display:none" onclick="resetAll()">Сброс</button>
+    </div>
+    <input type="file" id="fi" accept=".txt,.csv,.log,.tsv,.dat" multiple style="display:none" />
+  </div>
+  <div id="bod">
+    <div id="side">
+      <div id="presetsec">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <div class="lbl">Пресеты</div>
+          <button class="b s" onclick="savePreset()" title="Сохранить текущий вид">+ Сохранить</button>
+        </div>
+        <div id="presets-list"></div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <div class="lbl" id="pcnt">Параметры (0)</div>
+          <div style="display:flex;gap:2px"><button class="b s" onclick="selAll()">Все</button><button class="b s" onclick="selNone()">⊘</button></div>
+        </div>
+        <div class="psearch"><input type="text" id="psearch" placeholder="🔍 Поиск по тегу / имени..." oninput="setTagSearch(this.value)" /></div>
+        <div class="pl" id="plist"></div>
+      </div>
+      <div>
+        <div class="lbl">Размеры</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div><div style="font-size:11px;opacity:0.7;margin-bottom:2px" id="hlbl">Высота: авто</div><input type="range" min="0" max="1500" value="0" step="10" id="hsl" oninput="setH(this.value)" /></div>
+          <div><div style="font-size:11px;opacity:0.7;margin-bottom:2px" id="axslbl">Расст. осей Y: 55px</div><input type="range" min="15" max="120" value="55" step="1" id="axsl" oninput="setAxisSpacing(this.value)" /></div>
+          <div><div style="font-size:11px;opacity:0.7;margin-bottom:2px" id="fsslbl">Шрифт графика: 100%</div><input type="range" min="70" max="200" value="100" step="5" id="fssl" oninput="setFontScale(this.value)" title="Масштаб шрифтов осей и подписей графика. Пригодно для экспорта в PNG — крупнее для печати." /></div>
+        </div>
+      </div>
+      <div id="tsec" style="display:none">
+        <div class="lbl">Ось X - время</div>
+        <div style="font-size:10px;opacity:0.35;margin-bottom:2px" id="tsl"></div>
+        <div style="font-size:10px;opacity:0.35;margin-bottom:4px" id="tel"></div>
+        <div style="margin-bottom:2px"><div style="font-size:10px;opacity:0.35;margin-bottom:1px">От</div><input type="range" id="tfr" oninput="onTR()" /></div>
+        <div style="margin-bottom:2px"><div style="font-size:10px;opacity:0.35;margin-bottom:1px">До</div><input type="range" id="tto" oninput="onTR()" /></div>
+        <div style="display:flex;justify-content:space-between"><span style="font-size:10px;opacity:0.35" id="tfv"></span><span style="font-size:10px;opacity:0.35" id="ttv"></span></div>
+        <div class="ar" style="margin-top:3px"><input class="ai" id="xfm" type="text" placeholder="чч:мм:сс" oninput="onMXR()" /><span style="opacity:0.3">-</span><input class="ai" id="xtm" type="text" placeholder="чч:мм:сс" oninput="onMXR()" /></div>
+        <button class="b s" style="margin-top:3px" onclick="rstTR()">Авто X</button>
+      </div>
+      <div id="markersec">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <div class="lbl">Маркеры (<span id="mcount">0</span>)</div>
+          <div style="display:flex;gap:2px">
+            <button class="b s" onclick="exportMarkersJSON()" title="Экспорт в JSON">⬇</button>
+            <button class="b s" onclick="importMarkersClick()" title="Импорт из JSON">⬆</button>
+            <button class="b s" onclick="exportMarkersCSV()" title="Экспорт в CSV">CSV</button>
+          </div>
+        </div>
+        <div class="mfilters" id="mfilters"></div>
+        <div class="madd-row">
+          <button class="b" id="maddbtn" onclick="togAddMarker()" title="Поставить маркер кликом по графику">+ Поставить</button>
+          <select class="ai" id="maddtype" style="flex:1;font-size:11px;padding:2px 4px"></select>
+        </div>
+        <input type="text" class="ai" id="msearch" placeholder="🔍 Поиск в тексте..." style="margin-bottom:4px;font-size:11px;padding:3px 5px" oninput="setMarkerSearch(this.value)" />
+        <div class="mlist" id="mlist"></div>
+        <div style="display:flex;gap:3px;margin-top:4px">
+          <button class="b s" style="flex:1" onclick="clearAllMarkers()" title="Удалить ВСЕ маркеры" style="color:#f87171">🗑 Очистить маркеры</button>
+        </div>
+      </div>
+      <div>
+        <div class="lbl">Отображение</div>
+        <div class="cr"><button class="b on" id="bovr" onclick="setM('o')">Вместе</button><button class="b" id="bspl" onclick="setM('s')">Раздельно</button></div>
+        <div class="cr"><button class="b on" id="bts" onclick="setPlotMode('ts')">Время</button><button class="b" id="bxy" onclick="setPlotMode('xy')">X-Y</button></div>
+        <div id="xysec" style="display:none">
+          <div class="lbl">Ось X (параметр)</div>
+          <select class="ai" id="xysel" onchange="setXYParam(this.value)" style="width:100%;font-size:12px;padding:3px 5px"></select>
+        </div>
+        <div class="cr"><button class="b on" id="bcg" onclick="togCgaps()">Склейка</button><button class="b on" id="brs" onclick="togRslider()" title="Мини-слайдер под графиком для быстрой навигации по времени">Миникарта</button></div>
+        <div class="cr"><button class="b" id="bqgood" onclick="togQualityFilter()" title="Исключить точки с non-good status из графиков, статистики, сглаживания и аномалий">✓ Good</button></div>
+        <div>
+          <div class="lbl">Сглаживание</div>
+          <div class="cr"><button class="b on" id="smNone" onclick="setSmooth('none')">Нет</button><button class="b" id="smSpline" onclick="setSmooth('spline')">Сплайн</button><button class="b" id="smMavg" onclick="setSmooth('mavg')">СС</button><button class="b" id="smEma" onclick="setSmooth('ema')">EMA</button></div>
+          <div class="cr"><button class="b" id="smGauss" onclick="setSmooth('gauss')">Гаусс</button><button class="b" id="smSg" onclick="setSmooth('sg')">Сав-Гол</button><button class="b" id="smOrig" onclick="togSmoothOrig()">👁 Исход.</button></div>
+          <div id="smoothSliderSec" style="display:none"><div class="lbl" id="smlbl">Сила: 30</div><input type="range" min="1" max="100" value="30" step="1" id="smsl" oninput="setSmoothStr(this.value)"/><div style="font-size:10px;opacity:0.35" id="smdetail"></div></div>
+        </div>
+        <div>
+          <div class="lbl">Прореживание</div>
+          <div class="cr"><button class="b on" id="dsLttb" onclick="setDS('lttb')">LTTB</button><button class="b" id="dsMinmax" onclick="setDS('minmax')">Мин-Макс</button><button class="b" id="dsNth" onclick="setDS('nth')">Каждая N</button></div>
+        </div>
+        <div class="cr"><button class="b" id="banom" onclick="togAnomaly()">⚡ Аномалии</button><button class="b" id="bt0" onclick="togT0()">T=0</button></div>
+      </div>
+      <div id="anomsec" style="display:none">
+        <div class="lbl">Аномалии (Боллинджер)</div>
+        <div class="ar"><span style="font-size:11px;opacity:0.45;white-space:nowrap">Окно:</span><input class="ai" id="anomW" type="number" value="20" min="3" max="200" style="width:50px" onchange="render()"/><span style="font-size:11px;opacity:0.45;white-space:nowrap">σ:</span><input class="ai" id="anomK" type="number" value="2" min="0.5" max="5" step="0.5" style="width:50px" onchange="render()"/></div>
+      </div>
+      <div id="t0sec" style="display:none">
+        <div class="lbl">Сравнение T=0</div>
+        <div style="font-size:11px;opacity:0.45;margin-bottom:3px">Кликни по графику для установки T=0</div>
+        <div style="font-size:12px;opacity:0.65" id="t0info">Не установлено</div>
+        <button class="b s" style="margin-top:3px" onclick="resetT0()">Сбросить T=0</button>
+      </div>
+      <div>
+        <div class="lbl">Ось Y (раздельный режим)</div>
+        <div class="ar"><input class="ai" id="ymn" type="text" placeholder="Min" oninput="onYR()" /><span style="opacity:0.3">-</span><input class="ai" id="ymx" type="text" placeholder="Max" oninput="onYR()" /></div>
+        <button class="b s" style="margin-top:3px" onclick="rstY()">Авто Y</button>
+      </div>
+      <div class="shortcut-hint">📏 Измерение: клик1=▸A · клик2=◆B · тяни=двигать<br/>Маркеры: тип → «+ Поставить» → клик · <kbd>[</kbd><kbd>]</kbd>=прыжок<br/>Список параметров: клик=вкл/выкл · Shift+клик=только этот<br/>⇌ рядом с единицами = конверсия (°C↔°F, bar↔psi и т.п.)<br/>Зум: колесо · двойной клик=сброс · <kbd>Alt</kbd>+<kbd>←</kbd>/<kbd>→</kbd>=откат/повтор<br/>T=0: клик=точка выравнивания · Esc=отмена · F1=справка</div>
+    </div>
+    <div id="ca" ondrop="onDrop(event)" ondragover="onDgOv(event)" ondragleave="onDgLv()">
+      <div id="dz" onclick="fi.click()">
+        <div style="font-size:52px;opacity:.12;margin-bottom:20px">⬆</div>
+        <div style="font-size:16px;opacity:0.6;margin-bottom:8px">Перетащи .txt / .log файлы сюда</div>
+        <div style="font-size:12px;opacity:0.3;margin-bottom:24px">или нажми, чтобы выбрать</div>
+        <div style="font-size:13px;opacity:0.25;max-width:480px;text-align:center;line-height:1.7">Формат: группы по 5 колонок через Tab.<br />Несколько файлов -> одинаковые теги сращиваются.</div>
+      </div>
+      <div id="es">← Выбери параметры</div>
+      <div id="ch"></div>
+      <div id="cpanel">
+        <div class="cp-header">
+          <span class="cp-info" id="cp-times"></span>
+          <span class="cp-delta" id="cp-dt"></span>
+          <button class="b s" onclick="clearCursors()">Убрать курсоры</button>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Параметр</th><th style="color:#38bdf8">▸ A</th><th style="color:#f87171">◆ B</th><th style="color:#a78bfa">Δ</th><th>Min↔</th><th>Max↔</th><th>Avg↔</th></tr>
+          </thead>
+          <tbody id="cp-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="snapdot"></div><div id="snaplabel"></div>
+<input type="file" id="mimport" accept=".json" style="display:none"/>
+<div id="addhint" class="addhint"></div>
+<div id="umenu" class="umenu"></div>
+<div id="helpmod">
+  <div id="helpbg" onclick="togHelp()"></div>
+  <div id="helpwin">
+    <div id="helphdr">
+      <span>Справка — PA·GRAPH v0.9.0</span>
+      <button class="b s" onclick="togHelp()" title="Закрыть (Esc)">✕ Закрыть</button>
+    </div>
+    <div id="helpbody">
+      <div class="help-toc">
+        <strong>Содержание:</strong><br/>
+        <a href="#h-start">Начало работы</a><span class="help-toc-sep">·</span>
+        <a href="#h-sessions">Сессии</a><span class="help-toc-sep">·</span>
+        <a href="#h-presets">Пресеты</a><span class="help-toc-sep">·</span>
+        <a href="#h-params">Параметры и поиск</a><span class="help-toc-sep">·</span>
+        <a href="#h-modes">Режимы отображения</a><span class="help-toc-sep">·</span>
+        <a href="#h-zoom">Зум и навигация</a><span class="help-toc-sep">·</span>
+        <a href="#h-smooth">Сглаживание</a><span class="help-toc-sep">·</span>
+        <a href="#h-ds">Прореживание</a><span class="help-toc-sep">·</span>
+        <a href="#h-measure">Измерение A/B</a><span class="help-toc-sep">·</span>
+        <a href="#h-markers">Маркеры (события)</a><span class="help-toc-sep">·</span>
+        <a href="#h-anom">Аномалии</a><span class="help-toc-sep">·</span>
+        <a href="#h-t0">T=0</a><span class="help-toc-sep">·</span>
+        <a href="#h-levels">Уровни Lo/Hi</a><span class="help-toc-sep">·</span>
+        <a href="#h-units">Единицы измерения</a><span class="help-toc-sep">·</span>
+        <a href="#h-axes">Оси и высота</a><span class="help-toc-sep">·</span>
+        <a href="#h-perf">Производительность</a><span class="help-toc-sep">·</span>
+        <a href="#h-export">Экспорт</a><span class="help-toc-sep">·</span>
+        <a href="#h-keys">Горячие клавиши</a><span class="help-toc-sep">·</span>
+        <a href="#h-format">Формат файла</a><span class="help-toc-sep">·</span>
+        <a href="#h-storage">Хранение данных</a>
+      </div>
+
+      <h3 id="h-start">Начало работы</h3>
+      <p>Перетащи один или несколько <code>.txt</code>/<code>.csv</code>/<code>.log</code>/<code>.tsv</code>/<code>.dat</code> файлов в окно либо нажми кнопку <b>Открыть</b> и выбери их.</p>
+      <ul>
+        <li>Несколько файлов с одинаковыми тегами автоматически склеиваются во времени (индикатор <code>⟷ N</code> в шапке).</li>
+        <li>Нажми <b>+ Файл</b>, чтобы добавить ещё файл к текущим данным.</li>
+        <li><b>Сброс</b> (красная кнопка) очищает все загруженные данные и выбор параметров.</li>
+      </ul>
+      <div class="tip">Быстрый старт: перетащи файл → выбери параметры слева → выбери режим (Вместе/Раздельно) → масштабируй колёсиком или Plotly-бокс-зумом.</div>
+
+      <h3 id="h-sessions">Сессии (💾 в шапке)</h3>
+      <p>Кнопка <b>💾 Сессия</b> в правом верхнем углу раскрывает выпадающее меню. Сессия — полный снимок работы: данные, выбор параметров, зум, курсоры, маркеры, уровни, заголовки графиков, тема. Хранится в <b>IndexedDB</b> браузера (квота обычно 50%+ свободного места на диске), так что закрыл и переоткрыл — продолжил с того же места. Большие логи (100 тыс. точек × десятки параметров) влезают без проблем.</p>
+      <ul>
+        <li><b>Сохранить сессию…</b> — запрашивает имя (по умолчанию имя первого файла + дата-время), пишет слепок.</li>
+        <li>Ниже — список сохранённых сессий, клик по имени → загрузка (с подтверждением, если сейчас есть открытые данные).</li>
+        <li>Справа от имени — ✕ для удаления.</li>
+      </ul>
+      <p><b>Отличие от пресетов:</b> пресет — только вид (выбор параметров, стили, зум) при тех же уже загруженных данных. Сессия — полный снимок вместе с данными; восстанавливается «с нуля» без файлов.</p>
+      <p><b>Несколько наборов в одной вкладке:</b> работаешь с набором A → сохранил «Турбина пуск 2026-04» → сбросил → загрузил другой файл → сохранил «Компрессор авария» → теперь в меню два слота, переключаешься между ними мгновенно, без перезагрузки файлов и ре-зумирования.</p>
+      <div class="tip"><b>Формат v2:</b> точки хранятся как плоские <code>x[]</code>/<code>y[]</code> массивы вместо объектов <code>[{ts,val},...]</code> — размер payload сокращается примерно вдвое. Исходный текст файла в сессии не пишется — если нужна «💾 Сохранить с переименованными тегами», откройте файл заново. Старые сессии (формат v1) автоматически мигрируют при первой загрузке.</div>
+
+      <h3 id="h-presets">Пресеты видов</h3>
+      <p>Верхняя секция сайдбара. Сохраняют текущий вид целиком и восстанавливают одним кликом:</p>
+      <ul>
+        <li>Что сохраняется: выбранные параметры (SEL), режим отображения (вместе/раздельно, время/XY), сглаживание + сила, прореживание, аномалии, высота, расстояние осей, T=0, диапазон Y, слайдеры X, цвета/ширины/пунктиры линий.</li>
+        <li><b>+ Сохранить</b> — запрашивает имя, сохраняет слепок состояния.</li>
+        <li>Клик по имени пресета — применить.</li>
+        <li>✕ — удалить.</li>
+      </ul>
+      <p>Хранятся в <code>localStorage</code> под ключом <code>loggraph_presets</code>. Пережили бы сценарий «Пуск / Рабочий режим / Останов» — одинаковый набор параметров и зум, не надо каждый раз перенастраивать.</p>
+
+      <h3 id="h-params">Параметры, поиск, сайдбар</h3>
+      <p>Под пресетами — список параметров. При 50+ тегах используй поле <b>🔍 Поиск</b>: фильтрует по подстроке в полном теге, short-имени, вашем кастомном имени и в единицах измерения.</p>
+      <p>Каждая строка:</p>
+      <ul>
+        <li><b>Цветной квадрат</b> — клик открывает пикер цвета.</li>
+        <li><b>Имя</b> — редактируемая подпись (появится в легенде). Пусто = отображается short-имя.</li>
+        <li><b>Мета-строка</b> — показывает полный тег, количество точек, иконку слияния <code>⟷</code>, признак дискретности <code>⎍</code>, имя исходного файла.</li>
+        <li><b>Стиль линии</b>: 5 типов пунктиров (━ ╌ ··· ─· ──) и толщина − / +.</li>
+        <li><b>Уровни Lo / Hi</b> — см. раздел «Уровни».</li>
+        <li><b>Ед:</b> — единицы измерения, показываются над осью Y. Ввод фиксируется по Enter или клику вне поля.</li>
+        <li><b>⇌</b> — кнопка конверсии (см. раздел «Единицы»).</li>
+      </ul>
+      <p><b>Клик</b> по строке — вкл/выкл отображение параметра.<br/>
+      <b>Shift+клик</b> — solo-режим: показать только этот параметр, остальные скрыть. Удобно, когда нужно быстро сфокусироваться на одном, а потом вернуться через «Все».</p>
+      <p>Кнопки <b>Все</b> / <b>⊘</b> над списком выделяют всё или снимают выделение (применяется к фильтрованному списку, т.е. к видимому).</p>
+
+      <h3 id="h-modes">Режимы отображения</h3>
+      <ul>
+        <li><b>Вместе</b> — все параметры на одной панели, каждая со своей осью Y слева. Полезно для сравнения трендов.</li>
+        <li><b>Раздельно</b> — каждый параметр в отдельном чарте, оси X синхронизированы при зуме.</li>
+        <li><b>Время / X-Y</b> — время на X или любой параметр как X (поле «Ось X (параметр)»). В XY-режиме строится характеристическая кривая.</li>
+        <li><b>Склейка</b> — соединять разрывы во времени или разбивать линию на сегменты (определяется автоматически по скачку интервалов).</li>
+        <li><b>Миникарта</b> — лёгкий слайдер-навигатор под графиком: пустая дорожка с двумя хендлами. Тяни середину — панорамирование, тяни края — меняется ширина видимого окна. Клик по пустой области — прыжок. Работает в режимах «Вместе» и «Раздельно».</li>
+      </ul>
+
+      <h3 id="h-zoom">Зум и навигация</h3>
+      <p><b>Способы масштабирования по X:</b></p>
+      <ul>
+        <li><b>Колёсико</b> — зум к точке под курсором.</li>
+        <li><b>Перетаскивание рамкой</b> — стандартный box-zoom Plotly.</li>
+        <li><b>Слайдеры «От/До»</b> в сайдбаре — прицельное масштабирование оси X (как обычный зум, но задаётся числом).</li>
+        <li><b>Поля <code>чч:мм:сс</code></b> под слайдерами — прицельно задать диапазон вида.</li>
+        <li><b>Миникарта</b> под графиком — удобна для быстрого скроллинга длинного лога.</li>
+        <li><b>Двойной клик</b> на плоте — сброс в autorange.</li>
+      </ul>
+      <p><b>История зума:</b> кнопки <b>◀ ▶</b> и <kbd>Alt</kbd>+<kbd>←</kbd> / <kbd>Alt</kbd>+<kbd>→</kbd>. Каждый зум записывается в стек (глубина 40), можно вернуться на несколько шагов назад.</p>
+      <p><b>Y-зум:</b> перетаскивание рамкой по вертикали внутри области графика зумит Y (а не X). В режиме «Раздельно» — только текущего чарта; в «Вместе» — оси, на которую попал клик (Plotly выбирает ближайшую).</p>
+      <p><b>Ручной Y-диапазон:</b> поля «Ось Y (раздельный режим)» в сайдбаре (Min / Max). Работает только в «Раздельно», потому что в «Вместе» у каждого параметра своя ось. Кнопка <b>Авто Y</b> сбрасывает.</p>
+      <div class="tip"><b>Сохранение Y-зума при изменении набора параметров:</b> если ты подкрутил шкалу Y у параметра А (вручную или зумом рамкой) и добавляешь/убираешь параметр B, Y-зум параметра А НЕ сбросится. Ранее эта ручная настройка терялась — теперь на слой пересборки графика сохраняются все ручные Y-диапазоны по тегам.</div>
+
+      <h3 id="h-perf">Производительность</h3>
+      <p>Если зум «дёргается» при большом числе точек/параметров:</p>
+      <ul>
+        <li>Трассы свыше 2000 точек автоматически идут через <b>WebGL</b> (<code>scattergl</code>) — на порядок быстрее SVG.</li>
+        <li>Миникарта — легковесный слайдер (только DOM + CSS, без пересчёта на каждый тик колёсика).</li>
+        <li><code>prepareTraceData</code> мемоизируется LRU-кешем на 64 записи. Повторные рендеры с теми же параметрами (например, при переключении марцкеров) мгновенны.</li>
+        <li>При больших наборах ставь прореживание <b>LTTB</b> — оно сохраняет форму и при этом показывает ≤ 5000 точек.</li>
+        <li>Выключай <b>Аномалии</b> и <b>👁 Исход.</b>, когда они не нужны — каждая добавляет по одной трассе на параметр.</li>
+        <li>Для точечной работы с коротким интервалом используй слайдеры «От/До» или видимый диапазон — рендер тот же, но глаз видит меньше точек.</li>
+      </ul>
+
+      <h3 id="h-smooth">Сглаживание</h3>
+      <ul>
+        <li><b>Нет</b> — исходные данные.</li>
+        <li><b>Сплайн</b> — Plotly spline-интерполяция (меняется натяжение).</li>
+        <li><b>СС</b> — скользящее среднее (центрированное окно).</li>
+        <li><b>EMA</b> — экспоненциальное сглаживание (регулируется α).</li>
+        <li><b>Гаусс</b> — свёртка с гауссовым ядром (σ).</li>
+        <li><b>Сав-Гол</b> — Савицкий-Голей, сохраняет пики лучше СС (полином 2–3 порядка).</li>
+      </ul>
+      <p>Кнопка <b>👁 Исход.</b> показывает исходную линию поверх сглаженной (бледным пунктиром).</p>
+      <p>Слайдер <b>Сила</b> регулирует параметр для выбранного алгоритма.</p>
+
+      <h3 id="h-ds">Прореживание</h3>
+      <p>При большом числе точек (> 5000) применяется прореживание для плавного рендера:</p>
+      <ul>
+        <li><b>LTTB</b> — Largest-Triangle-Three-Buckets, визуально наиболее точный (рекомендуется).</li>
+        <li><b>Мин-Макс</b> — в каждой бакете берутся мин и макс, сохраняет пики.</li>
+        <li><b>Каждая N</b> — просто каждая N-я точка (самый быстрый).</li>
+      </ul>
+      <p>В счётчике точек сверху чарта показывается <code>N pts (⚡M)</code> — исходное и отрисованное.</p>
+
+      <h3 id="h-measure">Измерение A/B (курсоры)</h3>
+      <p>Кнопка <b>📏 Измерение</b> в шапке:</p>
+      <ul>
+        <li>Первый клик по графику ставит курсор <b>▸A</b> (голубой).</li>
+        <li>Второй клик — курсор <b>◆B</b> (красный), включается режим диапазона.</li>
+        <li>Тяни курсор мышью — двигать.</li>
+        <li><kbd>←</kbd> / <kbd>→</kbd> двигают B по 1/60 диапазона.</li>
+        <li><kbd>+</kbd> / <kbd>−</kbd> зумят вокруг B.</li>
+        <li><kbd>Esc</kbd> убирает курсоры.</li>
+      </ul>
+      <p>Снизу появляется таблица «A | B | Δ | Min↔ | Max↔ | Avg↔» для каждого выбранного параметра в диапазоне A↔B.</p>
+
+      <h3 id="h-markers">Маркеры (события, предупреждения, аварии, заметки)</h3>
+      <p>Подсистема в сайдбаре, не путать с «Измерением». Позволяет помечать точки на оси времени типизированными маркерами:</p>
+      <ul>
+        <li><span style="color:#34d399">●</span> <b>Событие</b> — регулярная веха (пуск, переход режима).</li>
+        <li><span style="color:#facc15">▲</span> <b>Предупр.</b> — предупреждение, отклонение.</li>
+        <li><span style="color:#f87171">⚠</span> <b>Авария</b> — критическое событие.</li>
+        <li><span style="color:#38bdf8">ℹ</span> <b>Заметка</b> — произвольный комментарий.</li>
+        <li><span style="color:#a78bfa">◆</span> <b>Своя</b> — пользовательский.</li>
+      </ul>
+      <p><b>Как поставить:</b> в секции «Маркеры» выбери тип в дропдауне → нажми <b>+ Поставить</b> → кликни на графике → введи текст (можно пустой). <kbd>Esc</kbd> отменяет режим.</p>
+      <p><b>Привязка к параметру (автоматическая):</b> если ты кликаешь рядом с линией, маркер автоматически привязывается к этому параметру. В списке ты увидишь «⟶ {имя}», а на графике к вертикали добавится <b>цветной кружок</b> прямо на линии параметра в точке события — очень наглядно для «здесь TNH скакнул». Клик по пустой области графика → маркер без привязки, только вертикаль.</p>
+      <p><b>Список маркеров</b> под фильтрами:</p>
+      <ul>
+        <li>Клик по строке — график панорамируется к этому маркеру.</li>
+        <li>Двойной клик — изменить текст.</li>
+        <li>✕ справа — удалить.</li>
+      </ul>
+      <p><b>Фильтры:</b> цветные чипы сверху — клик включает/выключает видимость по типу (и в списке, и на графике). Поле «🔍 Поиск в тексте» фильтрует по подстроке в описании.</p>
+      <p><b>Экспорт:</b></p>
+      <ul>
+        <li><b>⬇ JSON</b> — все маркеры в JSON (для передачи коллеге).</li>
+        <li><b>⬆ JSON</b> — импорт (добавляется к текущим).</li>
+        <li><b>CSV</b> — журнал событий для Excel: колонки «Время / Тип / Текст».</li>
+      </ul>
+      <p><b>Массовое удаление (<span style="color:#f87171">🗑 Очистить маркеры</span>):</b> снести все маркеры разом с подтверждением.</p>
+      <p><b>Навигация клавиатурой:</b> <kbd>[</kbd> — к предыдущему, <kbd>]</kbd> — к следующему видимому маркеру относительно центра текущего диапазона. Уважает активные фильтры и поиск.</p>
+      <p>Маркеры сохраняются в <code>localStorage</code> и переживают перезагрузку страницы. <b>Сброс</b> данных их <i>не</i> трогает — удаляй явно кнопкой «🗑 Очистить» или ✕ на строке.</p>
+      <p>Легаси: если в браузере есть аннотации из прежней версии, они автоматически мигрируют в маркеры типа <b>ℹ Заметка</b> при первом запуске.</p>
+
+      <h3 id="h-anom">Аномалии (Боллинджер)</h3>
+      <p>Кнопка <b>⚡ Аномалии</b> показывает доверительный коридор вокруг каждой серии:</p>
+      <ul>
+        <li><b>Окно</b> — размер скользящего окна для среднего и σ.</li>
+        <li><b>σ</b> — множитель стандартного отклонения (обычно 2).</li>
+      </ul>
+      <p>Точки, вылетающие за коридор, визуально выделяются.</p>
+
+      <h3 id="h-t0">T=0 — выравнивание по событию</h3>
+      <p>Кнопка <b>T=0</b>, затем клик по графику — эта точка становится нулём. Ось X переключается в «секунды от T=0». Удобно для сравнения пусков/остановов между разными запусками.</p>
+      <p><b>Сбросить T=0</b> возвращает абсолютное время.</p>
+
+      <h3 id="h-levels">Уровни Lo / Hi</h3>
+      <p>В строке каждого параметра есть поля <b>Lo</b> и <b>Hi</b>. Они рисуют пунктирные горизонтали и подсвечивают красным все сегменты, где значение вышло за пределы. Полезно для алармов, порогов, уставок.</p>
+
+      <h3 id="h-units">Единицы измерения и конверсия</h3>
+      <p>Из заголовка файла автоматически извлекается суффикс <code>[Гц]</code>, <code>[°C]</code>, <code>[бар]</code> и т.д. — он показывается над соответствующей осью Y цветом серии.</p>
+      <p>Поле <b>Ед:</b> в сайдбаре позволяет задать или изменить единицы вручную. Пусто = метка скрыта. В режиме <b>Вместе</b> метка выравнивается по правому краю оси (текст уходит от оси влево), в режиме <b>Раздельно</b> — по левому краю над осью.</p>
+      <p><b>Кнопка ⇌</b> рядом с полем «Ед:» появляется автоматически, если текущая единица поддерживает конверсию. Клик открывает меню с возможными целями. Клик по цели — пересчёт отображаемых значений (и Lo/Hi, если заданы) в новую единицу; исходные raw-значения сохраняются для точного возврата.</p>
+      <p>Поддерживаемые группы:</p>
+      <ul>
+        <li><b>Температура:</b> °C ↔ °F ↔ K</li>
+        <li><b>Давление:</b> bar ↔ psi ↔ kPa ↔ MPa</li>
+        <li><b>Мощность:</b> W ↔ kW ↔ MW (и Вт ↔ кВт ↔ МВт)</li>
+        <li><b>Длина:</b> m ↔ ft ↔ km</li>
+        <li><b>Скорость:</b> m/s ↔ km/h ↔ mph</li>
+      </ul>
+      <div class="tip">После конверсии график, статистика и выровненные CSV используют выбранную единицу, а raw-long CSV дополнительно показывает исходные raw-значения и raw-unit.</div>
+
+      <h3 id="h-axes">Оси и высота графика</h3>
+      <ul>
+        <li><b>Высота</b> — 0 = авто (заполняет вьюпорт), иначе фиксированная в пикселях.</li>
+        <li><b>Расст. осей Y</b> — расстояние между несколькими Y-осями в режиме «Вместе», в пикселях (15–120 px). Расстояние не зависит от ширины окна.</li>
+        <li><b>Ось Y</b> — ручной Min/Max для режима «Раздельно». Поддерживает запятую как десятичный разделитель.</li>
+        <li><b>Ось X — время</b> — два слайдера «От/До» и поля <code>чч:мм:сс</code> для точной установки диапазона.</li>
+        <li><b>Текущий диапазон оси</b> — сверху и снизу каждой оси Y всегда видны её текущие <code>max</code> и <code>min</code>. Значения обновляются живьём при зуме и при ручном редактировании границ (клик по экстремальным областям оси).</li>
+      </ul>
+
+      <h3 id="h-export">Экспорт</h3>
+      <p>CSV по умолчанию сохраняется как <b>UTF-8 с BOM</b>, чтобы не терять символы единиц измерения вроде <code>°C</code>, <code>µ</code>, <code>±</code>. Для старых Excel есть отдельный legacy-экспорт CP1251.</p>
+      <ul>
+        <li>Разделитель колонок — <code>;</code>.</li>
+        <li>Числа с запятой (<code>23,145</code>).</li>
+        <li>Время как datetime: <code>ДД.ММ.ГГГГ чч:мм:сс.ммм</code> (мс через точку — иначе Excel не распознаёт). После импорта: выдели весь диапазон → «Вставка → Диаграмма → Точечная с линиями» — получишь тот же график.</li>
+        <li>Legacy CP1251 нужен только для старых окружений; непредставимые Unicode-символы заменяются ASCII.</li>
+        <li>В заголовок колонки добавляются единицы в квадратных скобках, если они заданы: <code>DWATT [Вт]</code>.</li>
+        <li>Если параметры покрывают разные временные окна — строки объединяются, в «пустых» участках у колонки стоит пробел (Excel рисует разрыв линии).</li>
+      </ul>
+      <p>Все варианты собраны под единой кнопкой <b>⬇ Экспорт ▾</b> в шапке:</p>
+      <ul>
+        <li><b>⬇ CSV сырой long</b> — реальные исходные точки без интерполяции: локальное время, epoch µs при наличии, тег, значение, unit, status, файл.</li>
+        <li><b>⬇ CSV выровненный</b> — wide-таблица по объединённой временной сетке; пустые промежутки не экстраполируются, но значения внутри диапазона интерполируются.</li>
+        <li><b>⬇ CSV прореженный</b> — выровненная таблица после текущего прореживания (до 5000/серия).</li>
+        <li><b>⬇ CSV видимый</b> — только текущий видимый диапазон оси X (после зума колёсиком или дёрганья миникарты).</li>
+        <li><b>⬇ CSV сырой CP1251</b> — legacy-режим для старого Excel.</li>
+        <li><b>⬇ PNG</b> — PNG-рендер графика (1920 px, scale ×2). Добавляется название сверху. В режиме «Раздельно» склеивается в один файл с заголовками. Название и единицы разнесены по вертикали — в экспорте гарантированно не перекрываются.</li>
+      </ul>
+      <p>Плюс:</p>
+      <ul>
+        <li><b>💾</b> рядом с именем файла (в шапке после переименования тегов) — скачать исходный файл с переименованными тегами.</li>
+      </ul>
+
+      <h3 id="h-keys">Горячие клавиши</h3>
+      <ul>
+        <li><kbd>F1</kbd> — открыть/закрыть эту справку.</li>
+        <li><kbd>Esc</kbd> — закрыть справку · отменить режим «+ Поставить» · убрать курсоры A/B.</li>
+        <li><kbd>[</kbd> / <kbd>]</kbd> — прыжок к предыдущему/следующему видимому маркеру.</li>
+        <li><kbd>Alt</kbd>+<kbd>←</kbd> / <kbd>Alt</kbd>+<kbd>→</kbd> — <b>история зума</b>: откатить / повторить. Те же действия у кнопок <b>◀ ▶</b> в шапке. Стек на 40 переходов.</li>
+        <li><kbd>←</kbd> / <kbd>→</kbd> — двигать курсор B (в режиме «📏 Измерение»).</li>
+        <li><kbd>+</kbd> / <kbd>−</kbd> или <kbd>=</kbd> — зум вокруг курсора B.</li>
+        <li><kbd>Shift</kbd>+клик по строке параметра — solo-режим: только этот параметр.</li>
+        <li><kbd>Enter</kbd> — зафиксировать значение в поле ввода (имя, единица, Lo/Hi).</li>
+        <li>Двойной клик по графику — сброс зума (autorange).</li>
+      </ul>
+
+      <h3 id="h-format">Формат исходного файла</h3>
+      <p>Поддерживаются два варианта:</p>
+      <ul>
+        <li><b>Широкий</b> — общие колонки <code>Дата</code>, <code>Время</code>, <code>мс</code> (и опционально метка времени), далее значения. Используется в этом проекте.</li>
+        <li><b>Групповой</b> — повторяющиеся группы по 5 колонок: <code>Дата &lt;тег&gt;</code>, <code>Время &lt;тег&gt;</code>, <code>мс</code>, <code>status</code>, <code>значение</code>.</li>
+      </ul>
+      <p>Разделитель — табуляция. Десятичный — запятая (<code>23,145</code>) или точка. Единицы в заголовке пишутся в квадратных скобках: <code>[Гц]</code>, <code>[°C]</code>, <code>[psi]</code>. Первая строка может быть <code>%PAHEADER%</code> (пропускается).</p>
+      <div class="tip">Если теги в двух файлах совпадают — их данные сливаются по времени, дубликаты убираются. В шапке при этом показывается <code>⟷ N</code>.</div>
+
+      <h3 id="h-storage">Что хранится между запусками</h3>
+      <p>Всё локально, никаких внешних сервисов. Полные сессии сохраняются только по явной команде пользователя.</p>
+      <ul>
+        <li><b>IndexedDB <code>pagraph</code>/<code>sessions</code></b> — полные сессии (данные + вид). При сохранении приложение просит у браузера persistent storage, если API доступен.</li>
+        <li><code>localStorage.loggraph_presets</code> — пресеты вида (без данных).</li>
+        <li><code>localStorage.loggraph_markers</code> — типизированные маркеры (переживают сброс данных).</li>
+        <li><code>localStorage.pagraph_sessions</code> — <i>устаревший</i> ключ; если остался — автоматически мигрирует в IndexedDB при первом сохранении/загрузке.</li>
+      </ul>
+      <p>Очистить всё разом: DevTools → Application → Storage → Clear site data. Или через <b>Сброс</b> (текущие данные; пресеты/сессии не трогает) и ручное удаление ✕.</p>
+      <p><b>Копия в другой браузер/машину:</b> маркеры экспортируются JSON, сессии — через меню <b>Сессия → Экспорт в файл</b>.</p>
+    </div>
+  </div>
+</div>
+<div id="err"></div>
+<script src="vendor/plotly-3.5.0.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "test": "npm run build && node --test"
+  },
+  "devDependencies": {}
+}

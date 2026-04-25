@@ -1,0 +1,79 @@
+# PA-GRAPH / log-graph-v091
+
+Offline browser tool for loading local SCADA/PLC log files, plotting time series, measuring ranges, exporting CSV/PNG, and saving portable sessions.
+
+Русская версия: `README.ru.md`.
+
+## Run
+
+Build runtime artifacts first:
+
+```bash
+npm run build
+```
+
+Serve `dist/server` as static files:
+
+```bash
+cd dist/server
+python -m http.server 8080
+```
+
+Then open `http://localhost:8080/log-graph-v091.html`.
+
+Static serving is the supported portable mode because it enables external workers (`parser.worker.js`, `trace.worker.js`). Direct file opening is only an optional emergency fallback.
+
+## Portable Bundle
+
+Runtime files required on another PC:
+
+```text
+dist/server/
+log-graph-v091.html
+styles.css
+app.js
+parser.worker.js
+trace.worker.js
+vendor/plotly-3.5.0.min.js
+```
+
+Recommended portable launch on Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\serve-local.ps1
+```
+
+Build a zip:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\make-portable.ps1
+```
+
+## Test
+
+```bash
+npm test
+```
+
+The test suite validates the inline parser and export-critical behavior:
+
+- wide log parsing on the bundled sample;
+- grouped log `status` preservation;
+- Windows-1251 decoding;
+- CSV escaping;
+- raw-long CSV staying free of interpolation.
+
+## Data Handling
+
+The app works locally and does not call external services. Full sessions are written to IndexedDB only after an explicit save/import action. CSV exports default to UTF-8 with BOM; a legacy CP1251 raw export is available for older Excel environments.
+
+## Operations
+
+- `RUNBOOK.md` covers launch, recovery, diagnostics, and release checks.
+- `RUNBOOK.ru.md` is the Russian version.
+- `SECURITY_HEADERS.md` contains a static-hosting header template.
+- `SECURITY_HEADERS.ru.md` is the Russian version.
+- `CHANGELOG.md` lists review-hardening changes.
+- `CHANGELOG.ru.md` is the Russian version.
+- `RELEASE_NOTES.md` summarizes the current hardened build.
+- `RELEASE_NOTES.ru.md` is the Russian version.
