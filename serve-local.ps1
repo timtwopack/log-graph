@@ -54,6 +54,7 @@ function Write-HttpResponse {
     "Content-Length: $($Body.Length)`r`n" +
     "Cache-Control: no-store`r`n" +
     "X-Content-Type-Options: nosniff`r`n" +
+    "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`r`n" +
     "Referrer-Policy: no-referrer`r`n" +
     "Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`r`n" +
     "Cross-Origin-Opener-Policy: same-origin`r`n" +
@@ -103,7 +104,7 @@ try {
     $Client = $Listener.AcceptTcpClient()
     try {
       $Stream = $Client.GetStream()
-      $Reader = [System.IO.StreamReader]::new($Stream, [System.Text.Encoding]::ASCII, $false, 4096, $true)
+      $Reader = [System.IO.StreamReader]::new($Stream, [System.Text.Encoding]::UTF8, $false, 4096, $true)
       $RequestLine = $Reader.ReadLine()
       if ([string]::IsNullOrWhiteSpace($RequestLine)) { continue }
 

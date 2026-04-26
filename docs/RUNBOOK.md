@@ -73,4 +73,4 @@ No diagnostics are sent over the network by the app.
 5. Export `CSV сырой long` and confirm `°C`, epoch µs, time source, and merge-conflict columns are preserved.
 6. Save a browser session and export a session file.
 7. Reload the page and import the session file.
-8. Check `dist/server/build-manifest.json`; the SHA-256 for `src/app.js` must match the current checkout.
+8. Check `dist/server/build-manifest.json`; the SHA-256 values for source files and `package.json` must match the current checkout.

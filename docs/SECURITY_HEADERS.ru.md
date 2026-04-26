@@ -13,13 +13,14 @@ add_header Cross-Origin-Resource-Policy "same-origin" always;
 
 # dist/server загружает Plotly/app/styles из локальных файлов, но HTML пока содержит inline handlers/styles.
 # CSP без unsafe-inline требует отдельного UI-refactor шага: убрать inline onclick/style из шаблона.
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" always;
 ```
 
 ## Примечания
 
 - `dist/server` является единственным штатным runtime.
-- `worker-src 'self' blob:` нужен для `parser.worker.js`, `trace.worker.js` и fallback-workers.
+- `serve-local.ps1` отдаёт тот же CSP для переносимого локального запуска.
+- `worker-src 'self'` нужен для `parser.worker.js` и `trace.worker.js`.
 - `img-src blob: data:` нужен для PNG-экспорта и Plotly image generation.
 - `connect-src 'none'` фиксирует ожидаемую no-network модель.
 - Чтобы убрать `'unsafe-inline'`, нужно перевести template на `addEventListener`/CSS-классы вместо inline `onclick`/`style`.

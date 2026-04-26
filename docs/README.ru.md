@@ -35,7 +35,7 @@ python -m http.server 8080
 
 Статическая раздача обязательна для предсказуемой работы workers (`parser.worker.js`, `trace.worker.js`). Прямое открытие HTML больше не является поддерживаемым режимом: оно ломает модель workers и создаёт лишний релизный артефакт.
 
-Единственный source-of-truth для runtime — `src/index.template.html`, `src/styles.css`, `src/app.js` и два worker-файла. `dist/server` пересобирается командой `npm run build`; руками его не править. В `dist/server/build-manifest.json` записываются SHA-256 исходников, а `npm test` проверяет, что server-HTML подключает внешний `app.js`.
+Единственный source-of-truth для runtime — `src/index.template.html`, `src/styles.css`, `src/app.js`, два worker-файла и `package.json` с версией. `dist/server` пересобирается командой `npm run build`; руками его не править. В `dist/server/build-manifest.json` записываются SHA-256 исходников, а `npm test` проверяет, что server-HTML подключает внешний `app.js`.
 
 ### Минимальный переносимый комплект
 

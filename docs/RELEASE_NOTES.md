@@ -15,7 +15,7 @@ This build focuses on production-readiness issues found in the review of `log-gr
 
 ## Performance
 
-- File decoding and parsing run in a worker where available.
+- File decoding and parsing run only in `parser.worker.js`; static serving is required.
 - Multi-file loading is bounded to one or two concurrent parse jobs to reduce large-log memory peaks.
 - Initial trace downsampling can be precomputed in `trace.worker.js` when served over HTTP.
 - Recent load/render/precompute timings are available in diagnostics export.

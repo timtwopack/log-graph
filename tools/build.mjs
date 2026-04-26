@@ -17,8 +17,9 @@ const appPath = join(srcDir, 'app.js');
 const vendorPath = join(repoRoot, 'vendor', 'plotly-3.5.0.min.js');
 const parserWorkerPath = join(repoRoot, 'parser.worker.js');
 const traceWorkerPath = join(repoRoot, 'trace.worker.js');
+const packagePath = join(repoRoot, 'package.json');
 
-for (const path of [templatePath, stylesPath, appPath, vendorPath, parserWorkerPath, traceWorkerPath]) {
+for (const path of [templatePath, stylesPath, appPath, vendorPath, parserWorkerPath, traceWorkerPath, packagePath]) {
   if (!existsSync(path)) throw new Error(`Missing required build input: ${path}`);
 }
 
@@ -44,10 +45,15 @@ rmSync(legacyRootHtml, { force: true, maxRetries: 5, retryDelay: 150 });
 const template = readFileSync(templatePath, 'utf8');
 const styles = readFileSync(stylesPath, 'utf8');
 const app = readFileSync(appPath, 'utf8');
+const packageText = readFileSync(packagePath, 'utf8');
+const packageJson = JSON.parse(packageText);
+const appVersion = String(packageJson.version || '0.0.0');
+const builtTemplate = template.replaceAll('__APP_VERSION__', appVersion);
+const builtApp = app.replaceAll('__APP_VERSION__', appVersion);
 
-writeFileSync(join(serverDir, 'log-graph-v091.html'), template);
+writeFileSync(join(serverDir, 'log-graph-v091.html'), builtTemplate);
 writeFileSync(join(serverDir, 'styles.css'), styles);
-writeFileSync(join(serverDir, 'app.js'), app);
+writeFileSync(join(serverDir, 'app.js'), builtApp);
 copyFileSync(parserWorkerPath, join(serverDir, 'parser.worker.js'));
 copyFileSync(traceWorkerPath, join(serverDir, 'trace.worker.js'));
 ensureDir(join(serverDir, 'vendor'));
@@ -63,6 +69,7 @@ const manifest = {
     'src/index.template.html': sha256(template),
     'src/styles.css': sha256(styles),
     'src/app.js': sha256(app),
+    'package.json': sha256(packageText),
     'parser.worker.js': sha256(parserWorker),
     'trace.worker.js': sha256(traceWorker),
     'vendor/plotly-3.5.0.min.js': sha256(plotlyBuffer)

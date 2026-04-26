@@ -5,13 +5,14 @@ import { test } from 'node:test';
 import vm from 'node:vm';
 
 const appSource = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
+const parserSource = readFileSync(new URL('../parser.worker.js', import.meta.url), 'utf8');
+const templateSource = readFileSync(new URL('../src/index.template.html', import.meta.url), 'utf8');
 const styleSource = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const packageSource = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
 const serverHtml = readFileSync(new URL('../dist/server/log-graph-v091.html', import.meta.url), 'utf8');
+const builtAppSource = readFileSync(new URL('../dist/server/app.js', import.meta.url), 'utf8');
 const buildManifest = JSON.parse(readFileSync(new URL('../dist/server/build-manifest.json', import.meta.url), 'utf8'));
-
-function mainScript() {
-  return appSource;
-}
+const packageJson = JSON.parse(packageSource);
 
 function extractFunction(src, name) {
   const start = src.indexOf(`function ${name}(`);
@@ -27,8 +28,7 @@ function extractFunction(src, name) {
   throw new Error(`function ${name} body was not closed`);
 }
 
-function loadCore(names, prefix = '') {
-  const src = mainScript();
+function loadFromSource(src, names, prefix = '') {
   const code = [
     prefix,
     ...names.map(name => extractFunction(src, name)),
@@ -36,26 +36,39 @@ function loadCore(names, prefix = '') {
   ].join('\n');
   return new Function('TextDecoder', 'TextEncoder', code)(TextDecoder, TextEncoder);
 }
+function loadAppCore(names, prefix = '') {
+  return loadFromSource(appSource, names, prefix);
+}
+function loadParserCore(names, prefix = '') {
+  return loadFromSource(parserSource, names, prefix);
+}
 
 function sha256(textOrBuffer) {
   return createHash('sha256').update(textOrBuffer).digest('hex');
 }
 
 test('main inline script is syntactically valid', () => {
-  new Function(mainScript());
+  new Function(appSource);
 });
 
 test('build emits the static-server runtime', () => {
   assert.match(serverHtml, /<link rel="stylesheet" href="styles\.css" \/>/);
   assert.match(serverHtml, /<script src="app\.js"><\/script>/);
   assert.doesNotMatch(serverHtml, /function parseTextCore/);
+  assert.doesNotMatch(appSource, /function parseTextCore/);
+  assert.doesNotMatch(appSource, /function decodeBytesSmart/);
+  assert.doesNotMatch(appSource, /parserWorkerScript/);
 });
 
 test('build manifest matches the current source files', () => {
   assert.equal(buildManifest.entrypoint, 'log-graph-v091.html');
-  assert.equal(buildManifest.sources['src/index.template.html'], sha256(serverHtml));
+  assert.equal(buildManifest.sources['src/index.template.html'], sha256(templateSource));
   assert.equal(buildManifest.sources['src/styles.css'], sha256(styleSource));
   assert.equal(buildManifest.sources['src/app.js'], sha256(appSource));
+  assert.equal(buildManifest.sources['package.json'], sha256(packageSource));
+  assert.match(serverHtml, new RegExp(`PA·GRAPH v${packageJson.version.replaceAll('.', '\\.')}`));
+  assert.match(builtAppSource, new RegExp(`const APP_VERSION = '${packageJson.version.replaceAll('.', '\\.')}'`));
+  assert.doesNotMatch(builtAppSource, /__APP_VERSION__/);
 });
 
 test('external parser worker is syntactically valid', () => {
@@ -125,7 +138,7 @@ test('external trace worker prepares downsampled trace', () => {
 });
 
 test('parser handles sample wide log and strips hidden bidi controls', () => {
-  const core = loadCore([
+  const core = loadParserCore([
     'stripImportedControlChars',
     'cleanCell',
     'stripBom',
@@ -147,7 +160,7 @@ test('parser handles sample wide log and strips hidden bidi controls', () => {
 });
 
 test('grouped parser preserves status column per point', () => {
-  const core = loadCore([
+  const core = loadParserCore([
     'stripImportedControlChars',
     'cleanCell',
     'stripBom',
@@ -172,7 +185,7 @@ test('grouped parser preserves status column per point', () => {
 });
 
 test('grouped parser accepts English Date/Time headers', () => {
-  const core = loadCore([
+  const core = loadParserCore([
     'stripImportedControlChars',
     'cleanCell',
     'stripBom',
@@ -196,21 +209,21 @@ test('grouped parser accepts English Date/Time headers', () => {
 });
 
 test('epoch timestamp is the source of truth when present', () => {
-  const core = loadCore(['normalizeYear', 'epochToMs', 'wallClockTimestampFromParts', 'timestampFromParts']);
+  const core = loadParserCore(['normalizeYear', 'epochToMs', 'wallClockTimestampFromParts', 'timestampFromParts']);
   const epochUs = '1774155600000000';
   assert.equal(core.timestampFromParts('01-01-2000', '00:00:00', '000', epochUs), core.epochToMs(epochUs));
   assert.equal(core.timestampFromParts('22-03-2026', '12:00:00', '000', ''), core.wallClockTimestampFromParts('22-03-2026', '12:00:00', '000'));
 });
 
 test('file parsing is bounded to one or two concurrent files', () => {
-  const core = loadCore(['chooseFileParseConcurrency']);
+  const core = loadAppCore(['chooseFileParseConcurrency']);
   assert.equal(core.chooseFileParseConcurrency([]), 0);
   assert.equal(core.chooseFileParseConcurrency([{size: 10}, {size: 20}, {size: 30}]), 2);
   assert.equal(core.chooseFileParseConcurrency([{size: 51 * 1024 * 1024}, {size: 20}]), 1);
 });
 
 test('merge policy keeps conflicting same-timestamp values and marks them', () => {
-  const core = loadCore(
+  const core = loadAppCore(
     ['ensureParamColor', 'mergeParsedParams'],
     'const S={style:{PC:{}}}; const PAL=["#38bdf8"];'
   );
@@ -223,56 +236,55 @@ test('merge policy keeps conflicting same-timestamp values and marks them', () =
 });
 
 test('save-with-rename only edits matching header cells', () => {
-  const core = loadCore(['stripImportedControlChars', 'cleanCell', 'replaceHeaderTagCell']);
+  const core = loadAppCore(['stripImportedControlChars', 'cleanCell', 'replaceHeaderTagCell']);
   assert.equal(core.replaceHeaderTagCell('TAG_A [bar]', 'TAG_A [bar]', 'TAG_B [bar]'), 'TAG_B [bar]');
   assert.equal(core.replaceHeaderTagCell('Дата TAG_A [bar]', 'TAG_A [bar]', 'TAG_B [bar]'), 'Дата TAG_B [bar]');
   assert.equal(core.replaceHeaderTagCell('COMMENT TAG_A [bar] COMMENT', 'TAG_A [bar]', 'TAG_B [bar]'), 'COMMENT TAG_A [bar] COMMENT');
 });
 
 test('signal kind detection separates binary, step, and analog series', () => {
-  const core = loadCore(['detectSignalKind']);
+  const core = loadAppCore(['detectSignalKind']);
   assert.equal(core.detectSignalKind([{val: 0}, {val: 1}, {val: 1}], 'relay'), 'binary');
   assert.equal(core.detectSignalKind([{val: 103.6}, {val: 103.6}, {val: 104.0}], 'TNR Speed/Load Set Point'), 'step');
   assert.equal(core.detectSignalKind([{val: 10.1}, {val: 10.3}, {val: 10.7}, {val: 11.2}], 'temperature'), 'analog');
 });
 
 test('smart decoder round-trips Windows-1251 log bytes', () => {
-  const core = loadCore([
+  const parser = loadParserCore([
     'stripImportedControlChars',
     'cleanCell',
     'stripBom',
     'scoreDecodedLog',
     'decodeWithLabel',
-    'decodeBytesSmart',
-    'toCp1251'
+    'decodeBytesSmart'
   ]);
+  const app = loadAppCore(['toCp1251']);
   const source = 'Дата\tВремя\tмс\tТемпература [°C]\n22.02.2026\t12:00:00\t000\t23,5';
-  const decoded = core.decodeBytesSmart(core.toCp1251(source));
+  const decoded = parser.decodeBytesSmart(app.toCp1251(source));
   assert.equal(decoded.encoding, 'windows-1251');
   assert.match(decoded.text, /Температура \[°C\]/);
 });
 
 test('smart decoder round-trips UTF-16LE and UTF-16BE log bytes', () => {
-  const core = loadCore([
+  const parser = loadParserCore([
     'stripImportedControlChars',
     'cleanCell',
     'stripBom',
     'scoreDecodedLog',
     'decodeWithLabel',
-    'decodeBytesSmart',
-    'toUtf16Le',
-    'encodeTextBytes'
+    'decodeBytesSmart'
   ]);
+  const app = loadAppCore(['toUtf16Le', 'encodeTextBytes']);
   const source = 'Дата\tВремя\tмс\tДавление [бар]\n22.02.2026\t12:00:00\t000\t20,5';
   for(const encoding of ['utf-16le', 'utf-16be']){
-    const decoded = core.decodeBytesSmart(core.encodeTextBytes(source, encoding));
+    const decoded = parser.decodeBytesSmart(app.encodeTextBytes(source, encoding));
     assert.equal(decoded.encoding, encoding);
     assert.match(decoded.text, /Давление \[бар\]/);
   }
 });
 
 test('CSV escaping quotes semicolons, quotes, and line breaks', () => {
-  const core = loadCore(['csvCell', 'rowsToCsv']);
+  const core = loadAppCore(['csvCell', 'rowsToCsv']);
   const csv = core.rowsToCsv([
     ['A', 'B;C', 'D"E', 'F\nG']
   ]);
@@ -280,7 +292,7 @@ test('CSV escaping quotes semicolons, quotes, and line breaks', () => {
 });
 
 test('raw-long export branch does not interpolate synthetic values', () => {
-  const src = mainScript();
+  const src = appSource;
   const start = src.indexOf("if(mode === 'raw' || mode === 'raw-long')");
   const end = src.indexOf('/* Optional extra X range', start);
   assert.ok(start > 0 && end > start, 'raw-long branch is found');

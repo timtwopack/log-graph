@@ -103,6 +103,8 @@ npm run review:bundle
 
 Отправлять `dist/log-graph-review-source-*.zip`. Не отправлять отдельный `log-graph-v091.html` из старых сборок: текущий entrypoint генерируется в `dist/server` и должен проверяться через `npm run build`.
 
+`dist/server/build-manifest.json` должен совпадать по SHA-256 с текущими исходниками и `package.json`; версия в UI подставляется именно из `package.json`.
+
 ## Хранилище браузера
 
 Сессии сохраняются в IndexedDB только после команды сохранения/импорта. Пресеты и маркеры используют localStorage. Чтобы очистить всё локальное состояние:

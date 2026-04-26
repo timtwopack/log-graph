@@ -1,5 +1,7 @@
 'use strict';
 
+const APP_VERSION = '__APP_VERSION__';
+
 /* ===== State namespace =====
    All mutable module-level state lives under S, grouped by concern. Every
    reference in the main script goes through S.<group>.<name>; this is the single
@@ -257,7 +259,7 @@ function recordPerf(name, startMs, extra){
 function exportDiagnostics(){
   const payload = {
     exportedAt: new Date().toISOString(),
-    version: '0.9.0',
+    version: APP_VERSION,
     files: S.data.FN.slice(),
     params: S.data.AP.map(p => ({
       tag: p.tag,
@@ -805,74 +807,6 @@ function stripImportedControlChars(s){
 function cleanCell(s){
   return stripImportedControlChars(s).trim();
 }
-function stripBom(s){
-  return String(s == null ? '' : s).replace(/^\uFEFF/, '');
-}
-function scoreDecodedLog(text){
-  const head = stripBom(text).slice(0, 8192);
-  let score = 0;
-  if(head.indexOf('\uFFFD') !== -1) score -= 50;
-  const nulCount = (head.match(/\0/g) || []).length;
-  if(nulCount) score -= Math.min(40, nulCount * 2);
-  if(head.indexOf('%PAHEADER%') !== -1) score += 12;
-  if(/\b(Дата|Date)\t(Время|Time)/.test(head)) score += 12;
-  if(/\t/.test(head)) score += 2;
-  if(/[А-Яа-яЁё]/.test(head)) score += 2;
-  if(/\[[^\]]+\]/.test(head)) score += 1;
-  return score;
-}
-function decodeWithLabel(bytes, label, fatal){
-  try{
-    const text = new TextDecoder(label, {fatal: !!fatal}).decode(bytes);
-    return {text: stripBom(text), encoding: label, score: scoreDecodedLog(text)};
-  }catch(_e){
-    return null;
-  }
-}
-function decodeBytesSmart(bytes){
-  if(bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF){
-    const r = decodeWithLabel(bytes.subarray(3), 'utf-8', true);
-    if(r) return Object.assign(r, {bom: true});
-  }
-  if(bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE){
-    const r = decodeWithLabel(bytes.subarray(2), 'utf-16le', false);
-    if(r) return Object.assign(r, {bom: true});
-  }
-  if(bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF){
-    const r = decodeWithLabel(bytes.subarray(2), 'utf-16be', false);
-    if(r) return Object.assign(r, {bom: true});
-  }
-
-  const probeLen = Math.min(bytes.length, 4096);
-  let evenNul = 0, oddNul = 0;
-  for(let i = 0; i < probeLen; i++){
-    if(bytes[i] === 0) (i % 2 === 0 ? evenNul++ : oddNul++);
-  }
-
-  const candidates = [];
-  if(oddNul > evenNul * 2) candidates.push(['utf-16le', false]);
-  if(evenNul > oddNul * 2) candidates.push(['utf-16be', false]);
-  candidates.push(['utf-8', true], ['windows-1251', false], ['utf-16le', false], ['utf-16be', false]);
-
-  let best = null;
-  const seen = new Set();
-  for(const [enc, fatal] of candidates){
-    if(seen.has(enc)) continue;
-    seen.add(enc);
-    const r = decodeWithLabel(bytes, enc, fatal);
-    if(!r) continue;
-    if(!best || r.score > best.score) best = r;
-  }
-  if(best && best.score > -20) return Object.assign(best, {bom: false});
-  throw new Error('не удалось определить кодировку');
-}
-async function readFileTextSmart(file){
-  if(file.size > MAX_INPUT_FILE_BYTES){
-    throw new Error('файл слишком большой: ' + Math.round(file.size / 1024 / 1024) + ' МБ');
-  }
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  return decodeBytesSmart(bytes);
-}
 /* Encode string as Windows-1251 bytes (legacy Excel mode; UTF-8 BOM is the default export). */
 function toCp1251(str){
   const out = [];
@@ -951,11 +885,15 @@ function rowsToCsv(rows){
 }
 function downloadBytes(bytes, filename, type){
   const blob = new Blob([bytes], {type: type || 'application/octet-stream'});
+  downloadBlob(blob, filename);
+}
+function downloadBlob(blob, filename){
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = filename;
+  document.body.appendChild(a);
   a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  setTimeout(() => { a.remove(); URL.revokeObjectURL(a.href); }, 1000);
 }
 function downloadCsv(csvText, filename, encoding){
   const enc = encoding || 'utf-8-bom';
@@ -1197,40 +1135,6 @@ function setDS(alg){
   render();
 }
 
-function normalizeYear(y){
-  const n = parseInt(y, 10);
-  if(Number.isNaN(n)) return null;
-  if(String(y).length === 2) return 2000 + n;
-  return n;
-}
-function headerIndexFromText(text){
-  const first = stripBom(text).replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')[0] || '';
-  return first.startsWith('%PAHEADER%') ? 1 : 0;
-}
-function epochToMs(raw){
-  const s = String(raw || '').trim();
-  if(!/^-?\d{10,19}$/.test(s)) return null;
-  const n = Number(s);
-  if(!Number.isFinite(n)) return null;
-  if(Math.abs(n) >= 1e15) return Math.trunc(n / 1000); /* microseconds */
-  if(Math.abs(n) >= 1e12) return Math.trunc(n);        /* milliseconds */
-  return Math.trunc(n * 1000);                         /* seconds */
-}
-function wallClockTimestampFromParts(ds, ts, ms){
-  const dm = ds.match(/(\d{2})[.-](\d{2})[.-](\d{4}|\d{2})/);
-  if(!dm) return null;
-  const tm = ts.match(/(\d{2}):(\d{2}):(\d{2})/);
-  if(!tm) return null;
-  const year = normalizeYear(dm[3]);
-  if(year === null) return null;
-  const msv = parseInt(ms, 10) || 0;
-  return new Date(year, parseInt(dm[2], 10) - 1, parseInt(dm[1], 10), parseInt(tm[1], 10), parseInt(tm[2], 10), parseInt(tm[3], 10), msv).getTime();
-}
-function timestampFromParts(ds, ts, ms, epochRaw){
-  const epochMs = epochToMs(epochRaw);
-  if(epochMs !== null) return epochMs;
-  return wallClockTimestampFromParts(ds, ts, ms);
-}
 function shortNameFromTag(tag){
   let shortName = tag;
   const plcM = tag.match(/^(\S+)\s+(\S+)/);
@@ -1246,114 +1150,6 @@ function shortNameFromTag(tag){
     }
   }
   return shortName.length > 20 ? shortName.substring(0, 20) : shortName;
-}
-function parseTextCore(text){
-  const cleaned = stripImportedControlChars(stripBom(text));
-  const lines = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(ln => ln.trim() !== '');
-  if(lines.length < 3) return {p: [], e: 'Файл слишком короткий'};
-  let hi = 0;
-  if(lines[0].startsWith('%PAHEADER%')) hi = 1;
-
-  const hp = lines[hi].split('\t');
-  const params = [];
-  let col = 0;
-
-  while(col < hp.length){
-    const h = cleanCell(hp[col]);
-    if(!h){
-      col++;
-      continue;
-    }
-    const m = h.match(/^(?:Дата|Date)\s+(.+)/i);
-    if(m && col + 4 < hp.length){
-      const tag = cleanCell(m[1]);
-      const nextH = cleanCell(hp[col + 1]);
-      if(/^(?:Время|Time)(?:\s|$)/i.test(nextH) && nextH.indexOf(tag) !== -1){
-        const unitM = tag.match(/\[([^\]]+)\]\s*$/);
-        const unit = unitM ? cleanCell(unitM[1]) : '';
-        params.push({tag, originalTag: tag, shortName: shortNameFromTag(tag), unit, sourceFile: '', dc: col, tc: col + 1, mc: col + 2, sc: col + 3, ec: -1, vc: col + 4, data: [], cn: '', merged: false, timezone: 'local', timeSource: 'local'});
-        col += 5;
-        continue;
-      }
-    }
-    col++;
-  }
-  if(!params.length){
-    const h0 = cleanCell(hp[0]);
-    const h1 = cleanCell(hp[1]);
-    const h2 = cleanCell(hp[2]);
-    const isWide = (h0 === 'Дата' || h0 === 'Date') && (h1.startsWith('Время') || h1.startsWith('Time') || h1 === 'Время') && (h2 === 'мс' || h2 === 'ms');
-    if(!isWide) return {p: [], e: 'Не найдены группы параметров'};
-
-    let firstValCol = 3;
-    let epochCol = -1;
-    const h3 = cleanCell(hp[3]).toLowerCase();
-    if(h3.indexOf('метка') !== -1 || h3.indexOf('timestamp') !== -1 || h3.indexOf('шаг') !== -1 || h3.indexOf('epoch') !== -1){
-      firstValCol = 4;
-      epochCol = 3;
-    } else {
-      for(let si = hi + 1; si < Math.min(hi + 3, lines.length); si++){
-        const sln = lines[si];
-        if(!sln || !sln.trim()) continue;
-        const sp = sln.split('\t');
-        const v3 = cleanCell(sp[3]);
-        if(/^\d{10,}$/.test(v3)){
-          firstValCol = 4;
-          epochCol = 3;
-        }
-        break;
-      }
-    }
-
-    for(let vc = firstValCol; vc < hp.length; vc++){
-      const raw = cleanCell(hp[vc]);
-      if(!raw) continue;
-      const unitM = raw.match(/\[([^\]]+)\]\s*$/);
-      const unit = unitM ? cleanCell(unitM[1]) : '';
-      params.push({tag: raw, originalTag: raw, shortName: shortNameFromTag(raw), unit, sourceFile: '', dc: 0, tc: 1, mc: 2, sc: -1, ec: epochCol, vc: vc, data: [], cn: '', merged: false, _wide: true, timezone: epochCol >= 0 ? 'epoch' : 'local', timeSource: epochCol >= 0 ? 'epoch' : 'local'});
-    }
-
-    if(!params.length) return {p: [], e: 'Не найдены колонки параметров'};
-  }
-
-  for(let i = hi + 1; i < lines.length; i++){
-    const ln = lines[i];
-    if(!ln.trim()) continue;
-    const pp = ln.split('\t');
-    for(const pr of params){
-      const ds = cleanCell(pp[pr.dc]);
-      const ts = cleanCell(pp[pr.tc]);
-      const ms = cleanCell(pp[pr.mc]);
-      const vs = cleanCell(pp[pr.vc]);
-      if(!ds || !ts || !vs) continue;
-
-      const epochRaw = pr.ec >= 0 ? cleanCell(pp[pr.ec]) : '';
-      const t = timestampFromParts(ds, ts, ms, epochRaw);
-      if(t === null || !Number.isFinite(t)) continue;
-      const v = parseFloat(vs.replace(',', '.'));
-      if(Number.isNaN(v)) continue;
-      const status = pr.sc >= 0 ? cleanCell(pp[pr.sc]) : '';
-      const point = status ? {ts: t, val: v, status} : {ts: t, val: v};
-      if(epochRaw){
-        const epochMs = epochToMs(epochRaw);
-        if(epochMs !== null){
-          point.epochUs = Math.trunc(epochMs * 1000);
-          point.epochRaw = epochRaw;
-          point.timeSource = 'epoch';
-        }else{
-          point.timeSource = 'local';
-        }
-      }else{
-        point.timeSource = 'local';
-      }
-      pr.data.push(point);
-    }
-  }
-
-  for(const param of params){
-    param.data.sort((a, b) => a.ts - b.ts);
-  }
-  return {p: params, e: null};
 }
 function ensureParamColor(p){
   if(p && p.tag && !S.style.PC[p.tag]) S.style.PC[p.tag] = PAL[Object.keys(S.style.PC).length % PAL.length];
@@ -1418,85 +1214,41 @@ function mergeParsedParams(params, ex){
   }
   return {p: mg, e: null, conflicts: mg.reduce((sum, p) => sum + (p.mergeConflicts || 0), 0)};
 }
-function parse(text, ex){
-  const parsed = parseTextCore(text);
-  if(parsed.e) return parsed;
-  return mergeParsedParams(parsed.p, ex);
-}
-function parserWorkerScript(){
-  return [
-    "'use strict';",
-    stripImportedControlChars.toString(),
-    cleanCell.toString(),
-    stripBom.toString(),
-    scoreDecodedLog.toString(),
-    decodeWithLabel.toString(),
-    decodeBytesSmart.toString(),
-    normalizeYear.toString(),
-    epochToMs.toString(),
-    wallClockTimestampFromParts.toString(),
-    timestampFromParts.toString(),
-    shortNameFromTag.toString(),
-    parseTextCore.toString(),
-    headerIndexFromText.toString(),
-    "self.onmessage = function(e){",
-    "  try{",
-    "    const bytes = new Uint8Array(e.data.buffer);",
-    "    const decoded = decodeBytesSmart(bytes);",
-    "    const parsed = parseTextCore(decoded.text);",
-    "    self.postMessage({text: decoded.text, encoding: decoded.encoding, bom: !!decoded.bom, headerIdx: headerIndexFromText(decoded.text), params: parsed.p, error: parsed.e || null});",
-    "  }catch(err){",
-    "    self.postMessage({text: '', encoding: '', headerIdx: 0, params: [], error: err && err.message ? err.message : String(err)});",
-    "  }",
-    "};"
-  ].join('\n');
-}
 async function parseFilePayload(file){
   if(file.size > MAX_INPUT_FILE_BYTES){
     throw new Error('файл слишком большой: ' + Math.round(file.size / 1024 / 1024) + ' МБ');
   }
-  if(typeof Worker === 'function' && typeof URL !== 'undefined'){
-    try{
-      const buffer = await file.arrayBuffer();
-      let workerUrl = 'parser.worker.js';
-      let blobUrl = null;
-      if(location.protocol === 'file:' || typeof Blob !== 'function'){
-        blobUrl = URL.createObjectURL(new Blob([parserWorkerScript()], {type: 'text/javascript'}));
-        workerUrl = blobUrl;
-      }
-      return await new Promise((resolve, reject) => {
-        const worker = new Worker(workerUrl);
-        const cleanup = () => {
-          try{ worker.terminate(); }catch(_e){}
-          if(blobUrl) URL.revokeObjectURL(blobUrl);
-        };
-        const timer = setTimeout(() => {
-          cleanup();
-          reject(new Error('таймаут парсинга файла'));
-        }, 120000);
-        worker.onmessage = ev => {
-          clearTimeout(timer);
-          cleanup();
-          const data = ev.data || {};
-          if(data.error) reject(new Error(data.error));
-          else resolve({file, text: data.text, encoding: data.encoding, bom: !!data.bom, headerIdx: data.headerIdx, params: data.params || []});
-        };
-        worker.onerror = ev => {
-          clearTimeout(timer);
-          cleanup();
-          reject(new Error(ev.message || 'ошибка parser worker'));
-        };
-        worker.postMessage({buffer}, [buffer]);
-      });
-    }catch(workerError){
-      recordError('parser-worker', workerError);
-      /* Fallback below keeps the app usable on older locked-down browsers. */
-    }
+  if(location.protocol === 'file:'){
+    throw new Error('приложение нужно запускать через статический сервер: используйте serve-local.ps1 или dist/server');
   }
-  const decoded = await readFileTextSmart(file);
-  const parsed = parseTextCore(decoded.text);
-  if(parsed.e) throw new Error(parsed.e);
-  return {file, text: decoded.text, encoding: decoded.encoding, bom: !!decoded.bom, headerIdx: headerIndexFromText(decoded.text), params: parsed.p};
+  if(typeof Worker !== 'function'){
+    throw new Error('браузер не поддерживает Web Workers; парсинг доступен только через parser.worker.js');
+  }
+
+  const buffer = await file.arrayBuffer();
+  return await new Promise((resolve, reject) => {
+    const worker = new Worker('parser.worker.js');
+    const cleanup = () => {
+      try{ worker.terminate(); }catch(_e){}
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('таймаут парсинга файла'));
+    }, 120000);
+    worker.onmessage = ev => {
+      clearTimeout(timer);
+      cleanup();
+      const data = ev.data || {};
+      if(data.error) reject(new Error(data.error));
+      else resolve({file, text: data.text, encoding: data.encoding, bom: !!data.bom, headerIdx: data.headerIdx, params: data.params || []});
+    };
+    worker.onerror = ev => {
+      clearTimeout(timer);
+      cleanup();
+      reject(new Error(ev.message || 'ошибка parser worker'));
+    };
+    worker.postMessage({buffer}, [buffer]);
+  });
 }
 function chooseFileParseConcurrency(files){
   const arr = Array.from(files || []);
@@ -2502,7 +2254,7 @@ function exportCSV(mode, encoding){
 
 function fileTS(){
   const d = new Date();
-  return pad2(d.getDate()) + '-' + pad2(d.getMonth()+1) + '-' + String(d.getFullYear()).slice(2) + '_' + pad2(d.getHours()) + '-' + pad2(d.getMinutes()) + '-' + pad2(d.getSeconds());
+  return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()) + '_' + pad2(d.getHours()) + '-' + pad2(d.getMinutes()) + '-' + pad2(d.getSeconds());
 }
 
 async function exportPNG(){
@@ -3771,11 +3523,7 @@ function togAddMarker(){
 function exportMarkersJSON(){
   if(!S.markers.MARKERS.length){ showErr('Нет маркеров для экспорта'); return; }
   const blob = new Blob([JSON.stringify(S.markers.MARKERS, null, 2)], {type: 'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'markers_' + fileTS() + '.json';
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  downloadBlob(blob, 'markers_' + fileTS() + '.json');
 }
 function exportMarkersCSV(){
   if(!S.markers.MARKERS.length){ showErr('Нет маркеров для экспорта'); return; }
@@ -4175,7 +3923,6 @@ function updateZoomButtons(){
   const fwd = $('bzfwd');
   /* Back enabled whenever there is ANY recorded entry — POINTER=0 means user can
      still go "home" (autorange) via one more back press. */
-  if(back) back.disabled = S.zoom.ZOOM_POINTER < 0 && S.zoom.ZOOM_HISTORY.length === 0;
   if(back) back.disabled = S.zoom.ZOOM_POINTER < 0;
   if(fwd) fwd.disabled = S.zoom.ZOOM_POINTER >= S.zoom.ZOOM_HISTORY.length - 1;
 }

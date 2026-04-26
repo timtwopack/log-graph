@@ -26,6 +26,7 @@ dist/server/         генерируемый статический runtime
 ```
 
 `dist/` не хранится в Git. Single-file HTML больше не собирается: один штатный runtime проще проверять и сопровождать.
+Версия runtime берётся из `package.json` при `npm run build`.
 
 ## Документация
 
