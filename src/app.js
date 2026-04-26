@@ -89,6 +89,11 @@ const S = {
     T0_MODE: false,
     _t0ms: null
   },
+  time: {
+    DISPLAY_TZ: 'local',
+    HAS_EPOCH: false,
+    HAS_LOCAL_WALL: false
+  },
   anomaly: {
     ANOMALY_ON: false
   },
@@ -98,7 +103,11 @@ const S = {
   runtime: {
     ERRORS: [],
     PERF: [],
-    _lastLoadSummary: null
+    _lastLoadSummary: null,
+    TRACE_WORKER: null,
+    TRACE_WORKER_SEQ: 1,
+    TRACE_WORKER_PENDING: {},
+    TRACE_DATA_SEQ: 1
   }
 };
 
@@ -206,6 +215,7 @@ function wireStaticUi(){
     'toggle-connect-gaps': () => togCgaps(),
     'toggle-range-slider': () => togRslider(),
     'toggle-quality-filter': () => togQualityFilter(),
+    'toggle-time-zone': () => toggleTimeZone(),
     'set-smooth': el => setSmooth(el.dataset.mode),
     'toggle-smooth-original': () => togSmoothOrig(),
     'set-downsample': el => setDS(el.dataset.mode),
@@ -260,21 +270,53 @@ function wireStaticUi(){
 function pad2(n){ return String(n).padStart(2, '0'); }
 function pn(p){ return p.cn || p.shortName || p.tag; }
 function gc(p){ return S.style.PC[p.tag] || PAL[0]; }
-function ft(ts){
+function effectiveTimeZone(){
+  return S.time.DISPLAY_TZ === 'utc' && S.time.HAS_EPOCH ? 'utc' : 'local';
+}
+function dateParts(ts, zone){
   const d = new Date(ts);
-  return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+  if(zone === 'utc'){
+    return {
+      year: d.getUTCFullYear(),
+      month: d.getUTCMonth() + 1,
+      day: d.getUTCDate(),
+      hour: d.getUTCHours(),
+      minute: d.getUTCMinutes(),
+      second: d.getUTCSeconds(),
+      ms: d.getUTCMilliseconds()
+    };
+  }
+  return {
+    year: d.getFullYear(),
+    month: d.getMonth() + 1,
+    day: d.getDate(),
+    hour: d.getHours(),
+    minute: d.getMinutes(),
+    second: d.getSeconds(),
+    ms: d.getMilliseconds()
+  };
+}
+function ft(ts){
+  const p = dateParts(ts, effectiveTimeZone());
+  return pad2(p.hour) + ':' + pad2(p.minute) + ':' + pad2(p.second);
 }
 function ff(ts){
-  const d = new Date(ts);
-  return pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+  const p = dateParts(ts, effectiveTimeZone());
+  return pad2(p.day) + '.' + pad2(p.month) + '.' + p.year + ' ' + pad2(p.hour) + ':' + pad2(p.minute) + ':' + pad2(p.second) + '.' + String(p.ms).padStart(3, '0');
 }
 function localISO(ms){
   const d = new Date(ms);
   return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
+function utcISO(ms){
+  return new Date(ms).toISOString();
+}
+function axisDateValue(ms){
+  return effectiveTimeZone() === 'utc' ? utcISO(ms) : localISO(ms);
+}
 /* Absolute ms → value suitable for Plotly xaxis (ISO string for date axis, seconds for T=0 linear axis). */
 function msToAxis(ms){
-  return S.t0._t0ms !== null ? (ms - S.t0._t0ms) / 1000 : localISO(ms);
+  return S.t0._t0ms !== null ? (ms - S.t0._t0ms) / 1000 : axisDateValue(ms);
 }
 /* Plotly xaxis.range value → absolute ms. Handles date strings and T=0 seconds. */
 function axisToMs(v){
@@ -613,8 +655,22 @@ function columnarFilteredXY(data, opts){
   return {x, y, length: count};
 }
 function columnarTraceWorkerPayload(data, transfer){
-  if(!isColumnarData(data)) return {points: data || []};
+  if(!isColumnarData(data)) return null;
   const cols = data._cols;
+  const shared = typeof SharedArrayBuffer === 'function'
+    && cols.ts && cols.val
+    && cols.ts.buffer instanceof SharedArrayBuffer
+    && cols.val.buffer instanceof SharedArrayBuffer
+    && (!cols.statusCodes || cols.statusCodes.buffer instanceof SharedArrayBuffer);
+  if(shared){
+    return {
+      ts: cols.ts,
+      val: cols.val,
+      statusCodes: cols.statusCodes || null,
+      statusValues: cols.statusValues ? cols.statusValues.slice() : [],
+      sharedBuffers: true
+    };
+  }
   const ts = new Float64Array(cols.ts);
   const val = new Float64Array(cols.val);
   let statusCodes = null;
@@ -627,7 +683,8 @@ function columnarTraceWorkerPayload(data, transfer){
     ts,
     val,
     statusCodes,
-    statusValues: cols.statusValues ? cols.statusValues.slice() : []
+    statusValues: cols.statusValues ? cols.statusValues.slice() : [],
+    sharedBuffers: false
   };
 }
 function columnarDataFromPoints(points){
@@ -722,6 +779,16 @@ function exportDiagnostics(){
   const payload = {
     exportedAt: new Date().toISOString(),
     version: APP_VERSION,
+    time: {
+      displayTz: S.time.DISPLAY_TZ,
+      effectiveTz: effectiveTimeZone(),
+      hasEpoch: S.time.HAS_EPOCH,
+      hasLocalWall: S.time.HAS_LOCAL_WALL
+    },
+    traceWorker: {
+      active: !!S.runtime.TRACE_WORKER,
+      pending: Object.keys(S.runtime.TRACE_WORKER_PENDING || {}).length
+    },
     files: S.data.FN.slice(),
     params: S.data.AP.map(p => ({
       tag: p.tag,
@@ -1814,6 +1881,59 @@ async function parseFilesBounded(files){
   await Promise.all(workers);
   return loaded;
 }
+function traceDataId(p){
+  if(!p._traceDataId) p._traceDataId = 'p' + (S.runtime.TRACE_DATA_SEQ++);
+  return p._traceDataId;
+}
+function traceWorker(){
+  if(S.runtime.TRACE_WORKER) return S.runtime.TRACE_WORKER;
+  const worker = new Worker('trace.worker.js');
+  worker.onmessage = ev => {
+    const data = ev.data || {};
+    const id = data.requestId;
+    const pending = id && S.runtime.TRACE_WORKER_PENDING[id];
+    if(!pending) return;
+    delete S.runtime.TRACE_WORKER_PENDING[id];
+    clearTimeout(pending.timer);
+    if(data.error) pending.reject(new Error(data.error));
+    else pending.resolve(data);
+  };
+  worker.onerror = ev => {
+    const err = new Error(ev.message || 'ошибка trace worker');
+    const pending = S.runtime.TRACE_WORKER_PENDING;
+    S.runtime.TRACE_WORKER_PENDING = {};
+    for(const id of Object.keys(pending)){
+      clearTimeout(pending[id].timer);
+      pending[id].reject(err);
+    }
+    try{ worker.terminate(); }catch(_e){}
+    S.runtime.TRACE_WORKER = null;
+  };
+  S.runtime.TRACE_WORKER = worker;
+  return worker;
+}
+function traceWorkerRequest(message, transfer, timeoutMs){
+  return new Promise((resolve, reject) => {
+    const id = 'tw' + (S.runtime.TRACE_WORKER_SEQ++);
+    const timer = setTimeout(() => {
+      const pending = S.runtime.TRACE_WORKER_PENDING[id];
+      if(pending) delete S.runtime.TRACE_WORKER_PENDING[id];
+      reject(new Error('таймаут trace worker'));
+    }, timeoutMs || 60000);
+    S.runtime.TRACE_WORKER_PENDING[id] = {resolve, reject, timer};
+    try{
+      traceWorker().postMessage(Object.assign({requestId: id}, message), transfer || []);
+    }catch(e){
+      clearTimeout(timer);
+      delete S.runtime.TRACE_WORKER_PENDING[id];
+      reject(e);
+    }
+  });
+}
+function clearTraceWorkerState(){
+  if(!S.runtime.TRACE_WORKER) return;
+  try{ S.runtime.TRACE_WORKER.postMessage({type: 'clear'}); }catch(_e){}
+}
 async function precomputeTraceCacheForParams(params){
   if(location.protocol === 'file:' || typeof Worker !== 'function' || !params || !params.length) return;
   if(S.view.SMOOTH_TYPE !== 'none' || S.anomaly.ANOMALY_ON) return;
@@ -1822,61 +1942,54 @@ async function precomputeTraceCacheForParams(params){
   const transferBytes = params.reduce((sum, p) => {
     if(!isColumnarData(p.data)) return sum + ((p.data && p.data.length) || 0) * 32;
     const cols = p.data._cols;
-    return sum + cols.ts.byteLength + cols.val.byteLength + (cols.statusCodes ? cols.statusCodes.byteLength : 0);
+    const shared = typeof SharedArrayBuffer === 'function' && cols.ts.buffer instanceof SharedArrayBuffer && cols.val.buffer instanceof SharedArrayBuffer;
+    return shared ? sum : sum + cols.ts.byteLength + cols.val.byteLength + (cols.statusCodes ? cols.statusCodes.byteLength : 0);
   }, 0);
   if(transferBytes > TRACE_WORKER_MAX_TRANSFER_BYTES){
     recordPerf('trace-precompute-skip-large', started, {params: params.length, points: rawPointCount, bytes: transferBytes});
     return;
   }
   const transfer = [];
-  const items = params.filter(p => p.data && p.data.length).map(p => ({
-    key: _ptdKey(p),
-    param: {
-      name: pn(p),
-      signalKind: signalKindOf(p),
-      isDiscrete: isStepSignal(p),
-      color: gc(p),
-      lw: S.style.PW[p.tag] || S.view.LW,
-      ld: S.style.PD[p.tag] || S.view.LDASH,
-      dataColumnar: isColumnarData(p.data) ? columnarTraceWorkerPayload(p.data, transfer) : null
-    },
-    view: {
-      tr: S.view.TR ? S.view.TR.slice() : null,
-      qualityGoodOnly: S.data.QUALITY_GOOD_ONLY,
-      dsAlg: S.view.DS_ALG,
-      maxPts: MAX_PTS,
-      cgaps: S.view.CGAPS,
-      t0ms: S.t0._t0ms !== null ? S.t0._t0ms : null
-    }
-  }));
+  const loadParams = [];
+  const items = [];
+  for(const p of params){
+    if(!p.data || !p.data.length || !isColumnarData(p.data)) continue;
+    const dataId = traceDataId(p);
+    loadParams.push({id: dataId, dataColumnar: columnarTraceWorkerPayload(p.data, transfer)});
+    items.push({
+      key: _ptdKey(p),
+      param: {
+        dataId,
+        name: pn(p),
+        signalKind: signalKindOf(p),
+        isDiscrete: isStepSignal(p),
+        color: gc(p),
+        lw: S.style.PW[p.tag] || S.view.LW,
+        ld: S.style.PD[p.tag] || S.view.LDASH
+      },
+      view: {
+        tr: S.view.TR ? S.view.TR.slice() : null,
+        qualityGoodOnly: S.data.QUALITY_GOOD_ONLY,
+        dsAlg: S.view.DS_ALG,
+        maxPts: MAX_PTS,
+        cgaps: S.view.CGAPS,
+        t0ms: S.t0._t0ms !== null ? S.t0._t0ms : null
+      }
+    });
+  }
   if(!items.length) return;
   try{
-    const out = await new Promise((resolve, reject) => {
-      const worker = new Worker('trace.worker.js');
-      const cleanup = () => { try{ worker.terminate(); }catch(_e){} };
-      const timer = setTimeout(() => { cleanup(); reject(new Error('таймаут trace worker')); }, 60000);
-      worker.onmessage = ev => {
-        clearTimeout(timer);
-        cleanup();
-        const data = ev.data || {};
-        if(data.error) reject(new Error(data.error));
-        else resolve(data.items || []);
-      };
-      worker.onerror = ev => {
-        clearTimeout(timer);
-        cleanup();
-        reject(new Error(ev.message || 'ошибка trace worker'));
-      };
-      worker.postMessage({items}, transfer);
-    });
+    const loaded = await traceWorkerRequest({type: 'load', reset: true, params: loadParams}, transfer, 60000);
+    const prepared = await traceWorkerRequest({type: 'prepare', items}, [], 60000);
+    const out = prepared.items || [];
     for(const item of out){
       if(!item || !item.key || !item.data) continue;
-      if(item.data.xDispAreMs) item.data.xDisp = Array.from(item.data.xDisp, ms => new Date(ms));
+      if(item.data.xDispAreMs) item.data.xDisp = Array.from(item.data.xDisp, ms => msToAxis(ms));
       delete item.data.xDispAreMs;
       _ptdCache.set(item.key, item.data);
     }
     _ptdEvict();
-    recordPerf('trace-precompute-worker', started, {params: out.length});
+    recordPerf('trace-precompute-worker', started, {params: out.length, workerState: loaded.stored || 0, transferredBytes: transferBytes});
   }catch(e){
     recordError('trace-precompute-worker', e);
   }
@@ -1885,6 +1998,7 @@ async function precomputeTraceCacheForParams(params){
 async function hf(fileList){
   hideErr();
   clearTraceCache();
+  clearTraceWorkerState();
   resetZoomHistory();
   const files = Array.from(fileList || []);
   if(!files.length) return;
@@ -1950,6 +2064,7 @@ async function hf(fileList){
       p.isDiscrete = isStepSignal(p);
     });
 
+    refreshTimeSourceSummary();
     await precomputeTraceCacheForParams(S.data.AP.filter(p => S.data.SEL.has(p.tag)));
 
     updAll();
@@ -2005,6 +2120,58 @@ function togQualityFilter(){
   if(b) b.className = 'b' + (S.data.QUALITY_GOOD_ONLY ? ' on' : '');
   clearTraceCache();
   updSide();
+  render();
+}
+function hasTimeSourceValue(data, value){
+  if(!isColumnarData(data)) return Array.isArray(data) && data.some(d => d && d.timeSource === value);
+  const cols = data._cols;
+  const values = cols.timeSourceValues || [];
+  const idx = values.indexOf(value);
+  if(idx < 0) return false;
+  const codes = cols.timeSourceCodes;
+  if(!codes) return false;
+  for(let i = 0; i < codes.length; i++) if(codes[i] === idx) return true;
+  return false;
+}
+function refreshTimeSourceSummary(){
+  let hasEpoch = false;
+  let hasLocal = false;
+  for(const p of S.data.AP){
+    if(!p || !p.data || !p.data.length) continue;
+    if(p.timeSource === 'epoch' || p.timezone === 'epoch' || columnarHasField(p.data, 'epochUs') || hasTimeSourceValue(p.data, 'epoch')) hasEpoch = true;
+    if((p.timeSource || p.timezone || 'local') !== 'epoch' || hasTimeSourceValue(p.data, 'local')) hasLocal = true;
+  }
+  S.time.HAS_EPOCH = hasEpoch;
+  S.time.HAS_LOCAL_WALL = hasLocal;
+  updateTimeZoneButton();
+}
+function updateTimeZoneButton(){
+  const b = $('btz');
+  if(!b) return;
+  const canUtc = !!S.time.HAS_EPOCH;
+  b.disabled = !canUtc;
+  b.className = 'b' + (effectiveTimeZone() === 'utc' ? ' on' : '');
+  b.textContent = effectiveTimeZone() === 'utc' ? 'UTC' : 'Local';
+  if(!canUtc){
+    b.title = 'UTC доступен только для логов с epoch-меткой. Логи без epoch трактуются как локальное время ПК.';
+  } else if(S.time.HAS_LOCAL_WALL){
+    b.title = 'Смешанные источники времени: epoch можно отображать как UTC, строки без epoch остаются локальным wall-clock fallback.';
+  } else {
+    b.title = 'Epoch-логи: переключить отображение и CSV между локальным временем ПК и UTC.';
+  }
+}
+function toggleTimeZone(){
+  if(!S.time.HAS_EPOCH){
+    S.time.DISPLAY_TZ = 'local';
+    updateTimeZoneButton();
+    showErr('UTC-режим доступен только для логов с epoch-меткой');
+    return;
+  }
+  S.time.DISPLAY_TZ = effectiveTimeZone() === 'utc' ? 'local' : 'utc';
+  updateTimeZoneButton();
+  clearTraceCache();
+  updTB();
+  renderMarkersList();
   render();
 }
 
@@ -2482,6 +2649,11 @@ function setFontScale(v){
 /* Scale a base font size by the user's FONT_SCALE (rounded to nearest int because
    Plotly renders non-integer font-size with subpixel anti-aliasing that looks fuzzy). */
 function _fs(base){ return Math.max(1, Math.round(base * (S.view.FONT_SCALE || 1))); }
+function xAxisTitle(){
+  if(S.t0._t0ms !== null) return {text:'Секунды от T=0', font:{size:_fs(13)}};
+  if(S.time.HAS_EPOCH) return {text: effectiveTimeZone() === 'utc' ? 'Время (UTC)' : 'Время (Local)', font:{size:_fs(13)}};
+  return undefined;
+}
 function selAll(){
   S.data.AP.forEach(p => { if(p.data.length) S.data.SEL.add(p.tag); });
   updSide();
@@ -2521,7 +2693,7 @@ function onTR(){
   $('xfm').value = ft(f);
   $('xtm').value = ft(t);
   /* Zoom all plots without re-rendering */
-  const r = [localISO(f), localISO(t)];
+  const r = [msToAxis(f), msToAxis(t)];
   S.plot._allPlots.forEach(pd => {
     try{ Plotly.relayout(pd, {'xaxis.range': r}); }catch(_e){}
   });
@@ -2532,7 +2704,8 @@ function onMXR(){
     const m = s.match(/^(\d{1,2}):(\d{2}):(\d{2})$/);
     if(!m) return fb;
     const d = new Date(fb);
-    d.setHours(parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10), 0);
+    if(effectiveTimeZone() === 'utc') d.setUTCHours(parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10), 0);
+    else d.setHours(parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10), 0);
     return d.getTime();
   }
   const f = ps($('xfm').value.trim(), S.view.TB[0]);
@@ -2543,7 +2716,7 @@ function onMXR(){
   $('tfv').textContent = ft(f);
   $('ttv').textContent = ft(t);
   /* Zoom all plots */
-  const r = [localISO(f), localISO(t)];
+  const r = [msToAxis(f), msToAxis(t)];
   S.plot._allPlots.forEach(pd => {
     try{ Plotly.relayout(pd, {'xaxis.range': r}); }catch(_e){}
   });
@@ -2611,6 +2784,7 @@ function rstY(){
 }
 function resetAll(){
   clearTraceCache();
+  clearTraceWorkerState();
   resetZoomHistory();
   S.data.AP = [];
   S.data.FN = [];
@@ -2635,6 +2809,9 @@ function resetAll(){
   S.t0._t0ms = null;
   S.anomaly.ANOMALY_ON = false;
   S.t0.T0_MODE = false;
+  S.time.HAS_EPOCH = false;
+  S.time.HAS_LOCAL_WALL = false;
+  S.time.DISPLAY_TZ = 'local';
   S.markers.MARKER_ADD_TYPE = null;
   document.body.classList.remove('addcursor');
   if($('addhint')) $('addhint').classList.remove('vis');
@@ -2646,6 +2823,7 @@ function resetAll(){
   S.view.SMOOTH_ORIG = false;
   $('banom').className = 'b';
   $('bt0').className = 'b';
+  updateTimeZoneButton();
   $('bts').className = 'b on';
   $('bxy').className = 'b';
   if($('bqgood')) $('bqgood').className = 'b';
@@ -2672,10 +2850,13 @@ function resetAll(){
 /* Format timestamp for Excel: "ДД.ММ.ГГГГ чч:мм:сс.ммм" — Russian Excel auto-detects as datetime.
    NOTE: ms separator MUST be '.', not ',' — comma is the decimal sep in RU locale and would break datetime parsing. */
 function fmtTsExcel(ts){
-  const d = new Date(ts);
-  return pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) + '.' + d.getFullYear()
-    + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds())
-    + '.' + String(d.getMilliseconds()).padStart(3, '0');
+  const p = dateParts(ts, effectiveTimeZone());
+  return pad2(p.day) + '.' + pad2(p.month) + '.' + p.year
+    + ' ' + pad2(p.hour) + ':' + pad2(p.minute) + ':' + pad2(p.second)
+    + '.' + String(p.ms).padStart(3, '0');
+}
+function timeColumnHeader(){
+  return 'Дата/Время (' + (effectiveTimeZone() === 'utc' ? 'UTC' : 'Local') + ')';
 }
 
 /* Format number for Excel (RU locale): dot → comma, no thousand separator */
@@ -2690,7 +2871,7 @@ function exportCSV(mode, encoding){
   if(!act.length) return;
 
   if(mode === 'raw' || mode === 'raw-long'){
-    const rows = [['Дата/Время', 'Epoch µs', 'Источник времени', 'Тег', 'Имя', 'Значение', 'Ед. изм.', 'Raw значение', 'Raw ед. изм.', 'Статус', 'Merge conflict', 'Файл', 'Кодировка']];
+    const rows = [[timeColumnHeader(), 'Epoch µs', 'Источник времени', 'Тег', 'Имя', 'Значение', 'Ед. изм.', 'Raw значение', 'Raw ед. изм.', 'Статус', 'Merge conflict', 'Файл', 'Кодировка']];
     const rawRows = [];
     for(const p of act){
       const data = p.data;
@@ -2773,7 +2954,7 @@ function exportCSV(mode, encoding){
 
   /* Header built from `series` (the filtered list) — NOT `act` — so header and
      per-row cells stay aligned when some selected param has no points in range. */
-  const header = ['Дата/Время'];
+  const header = [timeColumnHeader()];
   series.forEach(s => {
     const nm = pn(s.param);
     header.push(s.param.unit ? (nm + ' [' + s.param.unit + ']') : nm);
@@ -3020,6 +3201,7 @@ function updAll(){
     fl.appendChild(merged);
   }
 
+  refreshTimeSourceSummary();
   if(hd && S.ui._sidebarVisible) $('side').className = 'vis';
   updSide();
   $('dz').style.display = hd ? 'none' : 'flex';
@@ -4076,7 +4258,7 @@ function exportMarkersJSON(){
 }
 function exportMarkersCSV(){
   if(!S.markers.MARKERS.length){ showErr('Нет маркеров для экспорта'); return; }
-  const rows = [['Время', 'Тип', 'Текст']];
+  const rows = [[timeColumnHeader(), 'Тип', 'Текст']];
   S.markers.MARKERS.forEach(m => {
     const t = (MARKER_TYPES[m.type] || {}).label || m.type;
     const text = (m.text || '').replace(/[\r\n]+/g, ' ');
@@ -4236,7 +4418,7 @@ function appendMarkerDotTraces(traces, params){
     const y = isStepSignal(p) ? interpStep(xArr, yArr, m.ts) : interpY(xArr, yArr, m.ts);
     if(y === null || !isFinite(y)) return;
     const cfg = MARKER_TYPES[m.type] || MARKER_TYPES.info;
-    const xDisp = S.t0._t0ms !== null ? (m.ts - S.t0._t0ms) / 1000 : new Date(m.ts);
+    const xDisp = msToAxis(m.ts);
     const yaxisName = pIdx === 0 ? 'y' : 'y' + (pIdx + 1);
     traces.push({
       x: [xDisp],
@@ -4257,7 +4439,7 @@ function appendMarkerDotTraces(traces, params){
 function buildMarkerShapes(){
   return getVisibleMarkers().map(m => {
     const cfg = MARKER_TYPES[m.type] || MARKER_TYPES.info;
-    const xVal = S.t0._t0ms !== null ? (m.ts - S.t0._t0ms) / 1000 : localISO(m.ts);
+    const xVal = msToAxis(m.ts);
     return {
       type:'line', xref:'x', yref:'paper', x0:xVal, x1:xVal, y0:0, y1:1,
       line:{color: cfg.color, width: 1.5, dash: cfg.dash || 'solid'}
@@ -4267,7 +4449,7 @@ function buildMarkerShapes(){
 function buildMarkerAnnotations(){
   return getVisibleMarkers().map(m => {
     const cfg = MARKER_TYPES[m.type] || MARKER_TYPES.info;
-    const xVal = S.t0._t0ms !== null ? (m.ts - S.t0._t0ms) / 1000 : localISO(m.ts);
+    const xVal = msToAxis(m.ts);
     const label = cfg.icon + (m.text ? ' ' + escapeHtml(m.text) : '');
     return {
       x: xVal, xref:'x', y: 0.98, yref:'paper',
@@ -4568,6 +4750,7 @@ function snapshotState(){
     smooth: S.view.SMOOTH_TYPE, smoothStr: S.view.SMOOTH_STR, smoothOrig: S.view.SMOOTH_ORIG,
     ds: S.view.DS_ALG, cgaps: S.view.CGAPS, rslider: S.ui.RSLIDER,
     qualityGoodOnly: S.data.QUALITY_GOOD_ONLY,
+    displayTz: S.time.DISPLAY_TZ,
     anomaly: S.anomaly.ANOMALY_ON, t0: S.t0._t0ms,
     height: S.view.CH, axisSpacing: S.view.AXIS_SPACING_PX, fontScale: S.view.FONT_SCALE,
     yr: S.view.YR.slice(), tr: S.view.TR ? S.view.TR.slice() : null,
@@ -4587,6 +4770,7 @@ function applyState(s){
   S.view.CGAPS = s.cgaps !== false;
   S.ui.RSLIDER = s.rslider !== false;
   S.data.QUALITY_GOOD_ONLY = !!s.qualityGoodOnly;
+  if(s.displayTz) S.time.DISPLAY_TZ = s.displayTz === 'utc' ? 'utc' : 'local';
   if($('bqgood')) $('bqgood').className = 'b' + (S.data.QUALITY_GOOD_ONLY ? ' on' : '');
   S.anomaly.ANOMALY_ON = !!s.anomaly;
   S.t0._t0ms = s.t0 != null ? s.t0 : null;
@@ -4618,6 +4802,7 @@ function applyState(s){
   $('anomsec').style.display = S.anomaly.ANOMALY_ON ? 'block' : 'none';
   $('t0sec').style.display = S.t0._t0ms !== null ? 'block' : 'none';
   if(S.t0._t0ms !== null) $('t0info').textContent = 'T=0: ' + ff(S.t0._t0ms);
+  refreshTimeSourceSummary();
   updSide();
   render();
 }
@@ -4932,6 +5117,7 @@ function snapshotSession(){
     cursorA: S.cursor._cursorA,
     cursorB: S.cursor._cursorB,
     t0ms: S.t0._t0ms,
+    displayTz: S.time.DISPLAY_TZ,
     anomalyOn: S.anomaly.ANOMALY_ON,
     markersOn: S.ui.MEASURE_ON,
     lightTheme: S.ui.LT,
@@ -4972,6 +5158,7 @@ async function loadSession(name){
   if(S.data.AP.length && !confirm('Загрузить сессию «' + name + '»? Текущие данные будут заменены.')) return;
   /* Reset current state without touching presets/sessions (they live in localStorage). */
   clearTraceCache();
+  clearTraceWorkerState();
   resetZoomHistory();
   /* Reconstruct each param's data array. v2 sessions store parallel x/y arrays to
      shrink localStorage; older sessions (pre-v2) have a `data` field of objects. */
@@ -5007,6 +5194,7 @@ async function loadSession(name){
   S.cursor._cursorA = s.cursorA != null ? s.cursorA : null;
   S.cursor._cursorB = s.cursorB != null ? s.cursorB : null;
   S.t0._t0ms = s.t0ms != null ? s.t0ms : null;
+  S.time.DISPLAY_TZ = s.displayTz === 'utc' ? 'utc' : 'local';
   S.anomaly.ANOMALY_ON = !!s.anomalyOn;
   S.ui.MEASURE_ON = !!s.markersOn;
   S.ui.READY = true;
@@ -5269,7 +5457,7 @@ function _ptdKey(p){
   const anomKey = S.anomaly.ANOMALY_ON ? ('A' + ($('anomW') ? $('anomW').value : '20') + '_' + ($('anomK') ? $('anomK').value : '2')) : 'NA';
   return p.tag + '|' + p.data.length + '|' + trKey + '|' + S.view.SMOOTH_TYPE + '|' + S.view.SMOOTH_STR + '|'
        + S.view.DS_ALG + '|' + MAX_PTS + '|' + S.view.CGAPS + '|' + (S.t0._t0ms !== null ? S.t0._t0ms : 'NT0') + '|'
-       + anomKey + '|' + signalKindOf(p) + '|' + (S.data.QUALITY_GOOD_ONLY ? 'QGOOD' : 'QALL');
+       + effectiveTimeZone() + '|' + anomKey + '|' + signalKindOf(p) + '|' + (S.data.QUALITY_GOOD_ONLY ? 'QGOOD' : 'QALL');
 }
 function _ptdEvict(){
   /* Map iteration is insertion order — drop the oldest until under limit */
@@ -5338,7 +5526,7 @@ function _prepareTraceDataImpl(p){
       const yGap = [yFinal[0]];
       for(let i = 1; i < xFinal.length; i++){
         if(xFinal[i] - xFinal[i-1] >= breakVal){
-          xGap.push(new Date((xFinal[i-1] + xFinal[i]) / 2));
+          xGap.push((xFinal[i-1] + xFinal[i]) / 2);
           yGap.push(null);
         }
         xGap.push(xFinal[i]);
@@ -5357,7 +5545,7 @@ function _prepareTraceDataImpl(p){
       return (ms - S.t0._t0ms) / 1000; /* seconds from T=0 */
     });
   } else {
-    xDisp = xFinal.map(x => x instanceof Date ? x : new Date(x));
+    xDisp = xFinal.map(x => axisDateValue(x instanceof Date ? x.getTime() : x));
   }
 
   /* Bollinger bands — computed per non-null segment so session gaps don't feed
@@ -5492,7 +5680,7 @@ function buildOverlaySpec(params, pd, h){
        Paper-coord offset computed from current plotW so the gap stays visually
        constant across window widths. */
     legend:{orientation:'h', x: Math.min(domainLeft + 18/plotW, 0.95), xanchor:'left', y:1, yanchor:'top', bgcolor:'rgba(0,0,0,0)', font:{size:_fs(13)}},
-    xaxis:{gridcolor:T.pgrid, linecolor:T.pline, tickcolor:T.pline, tickfont:{size:_fs(13)}, type:S.t0._t0ms!==null?'linear':'date', tickformat:'%d.%m.%Y %H:%M:%S', showspikes:false, rangeslider:{visible:false}, domain:[domainLeft, 1], title:S.t0._t0ms!==null?{text:'Секунды от T=0',font:{size:_fs(13)}}:undefined},
+    xaxis:{gridcolor:T.pgrid, linecolor:T.pline, tickcolor:T.pline, tickfont:{size:_fs(13)}, type:S.t0._t0ms!==null?'linear':'date', tickformat:'%d.%m.%Y %H:%M:%S', showspikes:false, rangeslider:{visible:false}, domain:[domainLeft, 1], title:xAxisTitle()},
     hovermode:'closest', hoverdistance:30,
     hoverlabel:{bgcolor:'rgba(0,0,0,0)', bordercolor:'rgba(0,0,0,0)', font:{size:1, color:'rgba(0,0,0,0)'}},
     dragmode:'zoom', /* always 'zoom' — MEASURE_ON handled by our capture-phase mousedown */
@@ -5775,7 +5963,7 @@ function buildSingleSpec(p, pd, h){
     /* r=40 keeps the rightmost X-tick label (full datetime) off the right edge. */
     margin:{l:62, r:40, t:64, b:44},
     legend:{orientation:'h', x:0, xanchor:'left', y:1, yanchor:'top', bgcolor:'rgba(0,0,0,0)', font:{size:_fs(13)}},
-    xaxis:{gridcolor:T.pgrid, linecolor:T.pline, tickcolor:T.pline, tickfont:{size:_fs(13)}, type:S.t0._t0ms!==null?'linear':'date', tickformat:'%d.%m.%Y %H:%M:%S', showspikes:false, rangeslider:{visible:false}, title:S.t0._t0ms!==null?{text:'Секунды от T=0',font:{size:_fs(13)}}:undefined},
+    xaxis:{gridcolor:T.pgrid, linecolor:T.pline, tickcolor:T.pline, tickfont:{size:_fs(13)}, type:S.t0._t0ms!==null?'linear':'date', tickformat:'%d.%m.%Y %H:%M:%S', showspikes:false, rangeslider:{visible:false}, title:xAxisTitle()},
     yaxis:ya,
     hovermode:'closest', hoverdistance:30,
     hoverlabel:{bgcolor:'rgba(0,0,0,0)', bordercolor:'rgba(0,0,0,0)', font:{size:1, color:'rgba(0,0,0,0)'}},
@@ -6087,6 +6275,7 @@ document.addEventListener('keydown', e => {
   renderMarkersList();
   renderPresetsList();
   updateHeightLabel();
+  updateTimeZoneButton();
   /* Re-render on window resize when height is auto */
   let _resizeTimer = null;
   window.addEventListener('resize', () => {

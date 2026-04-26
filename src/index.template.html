@@ -113,7 +113,7 @@
           <select class="ai" id="xysel" data-change="xy-param" style="width:100%;font-size:12px;padding:3px 5px"></select>
         </div>
         <div class="cr"><button class="b on" id="bcg" data-action="toggle-connect-gaps">Склейка</button><button class="b on" id="brs" data-action="toggle-range-slider" title="Мини-слайдер под графиком для быстрой навигации по времени">Миникарта</button></div>
-        <div class="cr"><button class="b" id="bqgood" data-action="toggle-quality-filter" title="Исключить точки с non-good status из графиков, статистики, сглаживания и аномалий">✓ Good</button></div>
+        <div class="cr"><button class="b" id="bqgood" data-action="toggle-quality-filter" title="Исключить точки с non-good status из графиков, статистики, сглаживания и аномалий">✓ Good</button><button class="b" id="btz" data-action="toggle-time-zone" title="Для epoch-логов: переключить отображение и CSV между локальным временем ПК и UTC">UTC</button></div>
         <div>
           <div class="lbl">Сглаживание</div>
           <div class="cr"><button class="b on" id="smNone" data-action="set-smooth" data-mode="none">Нет</button><button class="b" id="smSpline" data-action="set-smooth" data-mode="spline">Сплайн</button><button class="b" id="smMavg" data-action="set-smooth" data-mode="mavg">СС</button><button class="b" id="smEma" data-action="set-smooth" data-mode="ema">EMA</button></div>
@@ -255,6 +255,7 @@
         <li><b>Вместе</b> — все параметры на одной панели, каждая со своей осью Y слева. Полезно для сравнения трендов.</li>
         <li><b>Раздельно</b> — каждый параметр в отдельном чарте, оси X синхронизированы при зуме.</li>
         <li><b>Время / X-Y</b> — время на X или любой параметр как X (поле «Ось X (параметр)»). В XY-режиме строится характеристическая кривая.</li>
+        <li><b>Local / UTC</b> — для логов с epoch переключает подписи времени, ось X и CSV между локальным временем ПК и UTC. Если epoch нет, данные остаются локальным wall-clock.</li>
         <li><b>Склейка</b> — соединять разрывы во времени или разбивать линию на сегменты (определяется автоматически по скачку интервалов).</li>
         <li><b>Миникарта</b> — лёгкий слайдер-навигатор под графиком: пустая дорожка с двумя хендлами. Тяни середину — панорамирование, тяни края — меняется ширина видимого окна. Клик по пустой области — прыжок. Работает в режимах «Вместе» и «Раздельно».</li>
       </ul>
@@ -429,7 +430,7 @@
         <li><b>Групповой</b> — повторяющиеся группы по 5 колонок: <code>Дата &lt;тег&gt;</code>, <code>Время &lt;тег&gt;</code>, <code>мс</code>, <code>status</code>, <code>значение</code>.</li>
       </ul>
       <p>Разделитель — табуляция. Десятичный — запятая (<code>23,145</code>) или точка. Единицы в заголовке пишутся в квадратных скобках: <code>[Гц]</code>, <code>[°C]</code>, <code>[psi]</code>. Первая строка может быть <code>%PAHEADER%</code> (пропускается). В grouped-формате поддерживаются русские <code>Дата/Время</code> и английские <code>Date/Time</code> заголовки.</p>
-      <div class="tip">Если есть epoch-колонка, она используется как источник времени. Если теги в двух файлах совпадают — их данные сливаются по времени, точные дубликаты убираются, а конфликтующие точки с одинаковым временем помечаются в диагностике и raw-long CSV. В шапке при этом показывается <code>⟷ N</code>.</div>
+      <div class="tip">Если есть epoch-колонка, она используется как источник времени и хранится как абсолютный UTC instant. Переключатель Local/UTC меняет только представление времени. Если теги в двух файлах совпадают — их данные сливаются по времени, точные дубликаты убираются, а конфликтующие точки с одинаковым временем помечаются в диагностике и raw-long CSV. В шапке при этом показывается <code>⟷ N</code>.</div>
 
       <h3 id="h-storage">Что хранится между запусками</h3>
       <p>Всё локально, никаких внешних сервисов. Полные сессии сохраняются только по явной команде пользователя.</p>

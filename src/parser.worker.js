@@ -13,15 +13,38 @@ function copyParamMeta(param, length){
   meta.length = length;
   return meta;
 }
+function canUseSharedBuffers(){
+  return typeof SharedArrayBuffer === 'function' && !!self.crossOriginIsolated;
+}
+function makeTypedArray(Ctor, length, shared){
+  if(shared) return new Ctor(new SharedArrayBuffer(length * Ctor.BYTES_PER_ELEMENT));
+  return new Ctor(length);
+}
+function copyFloat64(values, length, shared, emptyValue){
+  const out = makeTypedArray(Float64Array, length, shared);
+  if(emptyValue !== undefined) out.fill(emptyValue);
+  if(values){
+    const n = Math.min(length, values.length);
+    if(values.subarray) out.set(values.subarray(0, n));
+    else for(let i = 0; i < n; i++) out[i] = Number(values[i]);
+  }
+  return out;
+}
+function addTransfer(transfer, array){
+  if(!array || !array.buffer) return;
+  if(typeof SharedArrayBuffer === 'function' && array.buffer instanceof SharedArrayBuffer) return;
+  transfer.push(array.buffer);
+}
 function packParamsForTransfer(params){
   const packed = [];
   const transfer = [];
+  const shared = canUseSharedBuffers();
   for(const param of params || []){
     const data = param.data || [];
     const len = data.length;
     const hasParserColumns = data && data._columnar && data._ts && data._val;
-    const ts = hasParserColumns ? data._ts.slice(0, len) : new Float64Array(len);
-    const val = hasParserColumns ? data._val.slice(0, len) : new Float64Array(len);
+    const ts = hasParserColumns ? copyFloat64(data._ts, len, shared) : makeTypedArray(Float64Array, len, shared);
+    const val = hasParserColumns ? copyFloat64(data._val, len, shared) : makeTypedArray(Float64Array, len, shared);
     let statusCodes = null;
     const statusValues = [];
     const statusMap = new Map();
@@ -48,7 +71,7 @@ function packParamsForTransfer(params){
       }
       if(status){
         if(!statusCodes){
-          statusCodes = new Int32Array(len);
+          statusCodes = makeTypedArray(Int32Array, len, shared);
           statusCodes.fill(-1);
         }
         if(!statusMap.has(status)){
@@ -59,15 +82,15 @@ function packParamsForTransfer(params){
       }
       if(pointEpochUs != null && Number.isFinite(pointEpochUs)){
         if(!epochUs){
-          epochUs = new Float64Array(len);
+          epochUs = makeTypedArray(Float64Array, len, shared);
           epochUs.fill(NaN);
         }
         epochUs[i] = pointEpochUs;
       }
       if(pointEpochRaw && typeof BigInt64Array === 'function' && typeof BigInt === 'function'){
         if(!epochRaw){
-          epochRaw = new BigInt64Array(len);
-          epochRawMask = new Uint8Array(len);
+          epochRaw = makeTypedArray(BigInt64Array, len, shared);
+          epochRawMask = makeTypedArray(Uint8Array, len, shared);
         }
         try{
           epochRaw[i] = BigInt(pointEpochRaw);
@@ -76,14 +99,14 @@ function packParamsForTransfer(params){
       }
       if(pointTimeSource && pointTimeSource !== defaultTimeSource){
         if(!timeSourceCodes){
-          timeSourceCodes = new Int32Array(len);
+          timeSourceCodes = makeTypedArray(Int32Array, len, shared);
           timeSourceCodes.fill(-1);
         }
         timeSourceCodes[i] = pointTimeSource === 'epoch' ? 0 : 1;
       }
       if(pointSourceFile){
         if(!sourceFileCodes){
-          sourceFileCodes = new Int32Array(len);
+          sourceFileCodes = makeTypedArray(Int32Array, len, shared);
           sourceFileCodes.fill(-1);
         }
         if(!sourceFileMap.has(pointSourceFile)){
@@ -94,16 +117,17 @@ function packParamsForTransfer(params){
       }
     }
 
-    const item = {meta: copyParamMeta(param, len), ts, val, statusValues};
-    transfer.push(ts.buffer, val.buffer);
-    if(statusCodes){ item.statusCodes = statusCodes; transfer.push(statusCodes.buffer); }
-    if(epochUs){ item.epochUs = epochUs; transfer.push(epochUs.buffer); }
-    if(epochRaw && epochRawMask){ item.epochRaw = epochRaw; item.epochRawMask = epochRawMask; transfer.push(epochRaw.buffer, epochRawMask.buffer); }
-    if(timeSourceCodes){ item.timeSourceCodes = timeSourceCodes; item.timeSourceValues = timeSourceValues; transfer.push(timeSourceCodes.buffer); }
-    if(sourceFileCodes){ item.sourceFileCodes = sourceFileCodes; item.sourceFileValues = sourceFileValues; transfer.push(sourceFileCodes.buffer); }
+    const item = {meta: copyParamMeta(param, len), ts, val, statusValues, sharedBuffers: shared};
+    addTransfer(transfer, ts);
+    addTransfer(transfer, val);
+    if(statusCodes){ item.statusCodes = statusCodes; addTransfer(transfer, statusCodes); }
+    if(epochUs){ item.epochUs = epochUs; addTransfer(transfer, epochUs); }
+    if(epochRaw && epochRawMask){ item.epochRaw = epochRaw; item.epochRawMask = epochRawMask; addTransfer(transfer, epochRaw); addTransfer(transfer, epochRawMask); }
+    if(timeSourceCodes){ item.timeSourceCodes = timeSourceCodes; item.timeSourceValues = timeSourceValues; addTransfer(transfer, timeSourceCodes); }
+    if(sourceFileCodes){ item.sourceFileCodes = sourceFileCodes; item.sourceFileValues = sourceFileValues; addTransfer(transfer, sourceFileCodes); }
     packed.push(item);
   }
-  return {paramsColumnar: packed, transfer};
+  return {paramsColumnar: packed, transfer, sharedBuffers: shared};
 }
 
 async function parseFileStream(file, keepText){
@@ -162,6 +186,7 @@ self.onmessage = function(e){
       bom: result.bom,
       headerIdx: result.headerIdx,
       paramsColumnar: packed.paramsColumnar,
+      sharedBuffers: packed.sharedBuffers,
       error: result.error
     }, packed.transfer);
   }).catch(err => {

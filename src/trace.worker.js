@@ -1,5 +1,7 @@
 'use strict';
 
+const TRACE_STATE = new Map();
+
 function downsampleDiscrete(xArr, yArr){
   if(xArr.length <= 2) return {x: xArr, y: yArr};
   const sx = [xArr[0]], sy = [yArr[0]];
@@ -108,8 +110,7 @@ function columnarStatusAt(data, index){
   const code = data.statusCodes[index];
   return code >= 0 ? data.statusValues[code] : '';
 }
-function filteredXYFromParam(p, view){
-  const data = p.dataColumnar;
+function filteredXYFromData(data, view){
   if(!data || !data.ts || !data.val){
     return {x: new Float64Array(0), y: new Float64Array(0), length: 0};
   }
@@ -135,11 +136,23 @@ function filteredXYFromParam(p, view){
   }
   return {x, y, length: count};
 }
+function traceDataForParam(p){
+  if(p.dataColumnar) return p.dataColumnar;
+  if(p.dataId && TRACE_STATE.has(p.dataId)) return TRACE_STATE.get(p.dataId);
+  return null;
+}
+function loadTraceState(params, reset){
+  if(reset) TRACE_STATE.clear();
+  for(const item of params || []){
+    if(item && item.id && item.dataColumnar) TRACE_STATE.set(item.id, item.dataColumnar);
+  }
+  return TRACE_STATE.size;
+}
 function prepareOne(req){
   const p = req.param;
   const view = req.view;
   const stepSignal = isStepKind(p.signalKind) || !!p.isDiscrete;
-  const filtered = filteredXYFromParam(p, view);
+  const filtered = filteredXYFromData(traceDataForParam(p), view);
   const xMsFull = filtered.x;
   const yFull = filtered.y;
   const ds = stepSignal ? downsampleDiscrete(xMsFull, yFull) : dsDispatch(xMsFull, yFull, view.maxPts, view.dsAlg);
@@ -194,9 +207,20 @@ function prepareOne(req){
 }
 self.onmessage = function(e){
   try{
-    const out = e.data.items.map(prepareOne);
-    self.postMessage({items: out, error: null});
+    const msg = e.data || {};
+    if(msg.type === 'load'){
+      const stored = loadTraceState(msg.params || [], !!msg.reset);
+      self.postMessage({type: 'load', requestId: msg.requestId, stored, error: null});
+      return;
+    }
+    if(msg.type === 'clear'){
+      TRACE_STATE.clear();
+      self.postMessage({type: 'clear', requestId: msg.requestId, stored: 0, error: null});
+      return;
+    }
+    const out = (msg.items || []).map(prepareOne);
+    self.postMessage({type: 'prepare', requestId: msg.requestId, items: out, error: null});
   }catch(err){
-    self.postMessage({items: [], error: err && err.message ? err.message : String(err)});
+    self.postMessage({type: 'error', requestId: e.data && e.data.requestId, items: [], error: err && err.message ? err.message : String(err)});
   }
 };

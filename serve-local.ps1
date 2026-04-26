@@ -58,6 +58,7 @@ function Write-HttpResponse {
     "Referrer-Policy: no-referrer`r`n" +
     "Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`r`n" +
     "Cross-Origin-Opener-Policy: same-origin`r`n" +
+    "Cross-Origin-Embedder-Policy: require-corp`r`n" +
     "Cross-Origin-Resource-Policy: same-origin`r`n" +
     "Connection: close`r`n`r`n"
 

@@ -10,13 +10,16 @@
 - Added a streaming large-file import path through `File.stream()` and incremental `TextDecoder` inside `parser.worker.js`; the main thread no longer has to read the full file into an `arrayBuffer()`.
 - Raised the input-file guardrail to 8 GiB; full source text is retained only up to 25 MiB, so save-with-renamed-tags is disabled for large logs.
 - Parser results are transferred from `parser.worker.js` as columnar typed arrays through a transfer-list; the main thread inflates them into the current UI data structure.
+- In cross-origin isolated runs, the parser worker creates `SharedArrayBuffer`-backed columns that the main thread and trace worker read without copying.
 - Main-state now uses `ColumnarData`: `S.data.AP[].data` is no longer a point-object array, while keeping an array-like API for existing UI code.
 - The internal `parser-core.js` buffer no longer accumulates `{ts,val}` objects and writes points into a columnar store instead.
-- Optional `trace.worker.js` precompute now receives cloned typed arrays through a transfer-list; very large selected datasets are skipped by a byte guard to avoid doubling hundreds of MiB immediately after import.
+- `trace.worker.js` now keeps worker-owned state by `dataId`; prepare requests send id/meta/view instead of point arrays.
+- Fallback trace precompute without `SharedArrayBuffer` receives cloned typed arrays through a transfer-list; very large selected datasets are skipped by a byte guard to avoid doubling hundreds of MiB immediately after import.
 - Hot render/export/XY/statistics/session snapshot/unit conversion paths now read and write columns directly without temporary `{ts,val,...}` object arrays.
 - Expanded encoding sniffing to 64 KiB so short binary/ASCII prefixes do not dominate UTF-8/CP1251/UTF-16 detection.
 - Preserved grouped-format `status` values per point.
 - Preserved optional epoch timestamp as `epochUs` and use it as the timestamp source of truth; local date/time columns remain the fallback.
+- Added an explicit Local/UTC display and CSV mode for epoch logs; logs without epoch remain local wall-clock.
 - Documented that the `Date/Time/ms` fallback without epoch is interpreted as local browser time.
 - Wide-log epoch columns are now inferred from several initial rows instead of only the first data row.
 - Two-digit years now use the `00..69 => 2000..2069`, `70..99 => 1970..1999` window.

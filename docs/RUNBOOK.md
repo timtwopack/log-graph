@@ -22,6 +22,7 @@ Open `http://localhost:8080/index.html`.
 ## Time And Quality
 
 - If an epoch column exists, epoch is the timestamp source of truth.
+- Epoch is treated as an absolute UTC instant. The UI has a `Local`/`UTC` switch that changes the X-axis display, time labels, and CSV timestamps.
 - Without epoch, `Date/Time/ms` columns are interpreted as local browser time on the current PC.
 - Good `status` values are empty status, numeric `0`, `good`, `ok`, `valid`, `норма`, `норм`, `goodprovider`, and `goodlocaloverride`, ignoring case and surrounding whitespace.
 

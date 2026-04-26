@@ -12,6 +12,7 @@ const traceWorkerSource = readFileSync(new URL('../src/trace.worker.js', import.
 const templateSource = readFileSync(new URL('../src/index.template.html', import.meta.url), 'utf8');
 const styleSource = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const packageSource = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
+const serveLocalSource = readFileSync(new URL('../serve-local.ps1', import.meta.url), 'utf8');
 const serverHtml = readFileSync(new URL('../dist/server/index.html', import.meta.url), 'utf8');
 const builtAppSource = readFileSync(new URL('../dist/server/app.js', import.meta.url), 'utf8');
 const buildManifest = JSON.parse(readFileSync(new URL('../dist/server/build-manifest.json', import.meta.url), 'utf8'));
@@ -131,6 +132,12 @@ test('build emits the static-server runtime', () => {
   assert.doesNotMatch(appSource, /parserWorkerScript/);
 });
 
+test('local static server enables cross-origin isolation for shared buffers', () => {
+  assert.match(serveLocalSource, /Cross-Origin-Opener-Policy:\s*same-origin/);
+  assert.match(serveLocalSource, /Cross-Origin-Embedder-Policy:\s*require-corp/);
+  assert.match(serveLocalSource, /Cross-Origin-Resource-Policy:\s*same-origin/);
+});
+
 test('build manifest matches the current source files', () => {
   assert.equal(buildManifest.entrypoint, 'index.html');
   assert.equal(buildManifest.sources['src/index.template.html'], sha256(templateSource));
@@ -240,6 +247,61 @@ test('external parser worker parses sample log', async () => {
   assert.equal(posted.text, '');
 });
 
+test('parser worker emits SharedArrayBuffer columns when cross-origin isolated', async () => {
+  let posted = null;
+  let postedTransfer = null;
+  const ctx = {
+    self: {
+      crossOriginIsolated: true,
+      postMessage: (msg, transfer) => { posted = msg; postedTransfer = transfer || []; }
+    },
+    importScripts: (...paths) => {
+      for(const path of paths){
+        if(path !== 'parser-core.js') throw new Error(`unexpected importScripts path: ${path}`);
+        vm.runInContext(parserCoreSource, ctx);
+      }
+    },
+    TextDecoder,
+    Date,
+    Number,
+    Math,
+    RegExp,
+    String,
+    Array,
+    Map,
+    Object,
+    Set,
+    Float64Array,
+    Int32Array,
+    Uint8Array,
+    BigInt64Array,
+    BigInt,
+    SharedArrayBuffer
+  };
+  vm.createContext(ctx);
+  vm.runInContext(parserWorkerSource, ctx);
+  const sample = readFileSync(new URL('../data_base/test_base.txt', import.meta.url));
+  ctx.self.onmessage({ data: { buffer: sample.buffer.slice(sample.byteOffset, sample.byteOffset + sample.byteLength), keepText: false } });
+  await new Promise((resolve, reject) => {
+    const started = Date.now();
+    const tick = () => {
+      if(posted) resolve();
+      else if(Date.now() - started > 1000) reject(new Error('parser worker did not post a shared-buffer result'));
+      else setTimeout(tick, 5);
+    };
+    tick();
+  });
+  assert.equal(posted.error, null);
+  assert.equal(posted.sharedBuffers, true);
+  assert.ok(posted.paramsColumnar.length > 0);
+  assert.equal(postedTransfer.length, 0);
+  assert.ok(posted.paramsColumnar[0].ts.buffer instanceof SharedArrayBuffer);
+  assert.ok(posted.paramsColumnar[0].val.buffer instanceof SharedArrayBuffer);
+  const app = loadAppCore(['inflateWorkerParams']);
+  const params = app.inflateWorkerParams(posted);
+  assert.ok(params[0].data._cols.ts.buffer instanceof SharedArrayBuffer);
+});
+
 test('trace worker payload transfers cloned columnar buffers', () => {
   const app = loadAppCore([
     'createColumnarData',
@@ -263,6 +325,24 @@ test('trace worker payload transfers cloned columnar buffers', () => {
   assert.ok(transfer.includes(payload.val.buffer));
   payload.ts[0] = 9999;
   assert.equal(app.columnarValue(data, 0, 'ts'), 1000);
+});
+
+test('trace worker payload reuses shared columnar buffers without transfer', () => {
+  const app = loadAppCore([
+    'createColumnarData',
+    'columnarTraceWorkerPayload'
+  ]);
+  const ts = new Float64Array(new SharedArrayBuffer(16));
+  const val = new Float64Array(new SharedArrayBuffer(16));
+  ts.set([1000, 2000]);
+  val.set([10, 20]);
+  const data = app.createColumnarData({ts, val});
+  const transfer = [];
+  const payload = app.columnarTraceWorkerPayload(data, transfer);
+  assert.equal(payload.sharedBuffers, true);
+  assert.equal(payload.ts.buffer, data._cols.ts.buffer);
+  assert.equal(payload.val.buffer, data._cols.val.buffer);
+  assert.equal(transfer.length, 0);
 });
 
 test('worker columnar params inflate status, epoch, and time source', () => {
@@ -313,20 +393,31 @@ test('external trace worker prepares downsampled trace', () => {
     ts[i] = i * 100;
     val[i] = Math.sin(i);
   }
-  ctx.self.onmessage({ data: { items: [{
+  ctx.self.onmessage({ data: {
+    type: 'load',
+    requestId: 'load-1',
+    reset: true,
+    params: [{id: 'p1', dataColumnar: {ts, val, statusCodes: null, statusValues: []}}]
+  } });
+  assert.equal(posted.error, null);
+  assert.equal(posted.type, 'load');
+  assert.equal(posted.stored, 1);
+  ctx.self.onmessage({ data: { type: 'prepare', requestId: 'prep-1', items: [{
     key: 'k',
     param: {
+      dataId: 'p1',
       name: 'P',
       signalKind: 'analog',
       isDiscrete: false,
       color: '#fff',
       lw: 1,
-      ld: 'solid',
-      dataColumnar: {ts, val, statusCodes: null, statusValues: []}
+      ld: 'solid'
     },
     view: { tr: null, qualityGoodOnly: false, dsAlg: 'minmax', maxPts: 20, cgaps: true, t0ms: null }
   }] } });
   assert.equal(posted.error, null);
+  assert.equal(posted.type, 'prepare');
+  assert.equal(posted.requestId, 'prep-1');
   assert.equal(posted.items[0].key, 'k');
   assert.ok(posted.items[0].data.yDisp.length <= 22);
 });
@@ -531,6 +622,16 @@ test('CSV escaping quotes semicolons, quotes, and line breaks', () => {
     ['A', 'B;C', 'D"E', 'F\nG']
   ]);
   assert.equal(csv, 'A;"B;C";"D""E";"F\nG"');
+});
+
+test('UTC display formatting is explicit for epoch logs', () => {
+  const core = loadAppCore(
+    ['pad2', 'effectiveTimeZone', 'dateParts', 'fmtTsExcel', 'timeColumnHeader'],
+    "const S = {time:{DISPLAY_TZ:'utc', HAS_EPOCH:true}};"
+  );
+  const ts = Date.UTC(2026, 0, 2, 3, 4, 5, 6);
+  assert.equal(core.fmtTsExcel(ts), '02.01.2026 03:04:05.006');
+  assert.equal(core.timeColumnHeader(), 'Дата/Время (UTC)');
 });
 
 test('raw-long export branch does not interpolate synthetic values', () => {
