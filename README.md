@@ -14,20 +14,30 @@ powershell -ExecutionPolicy Bypass -File .\serve-local.ps1
 ## Структура
 
 ```text
-src/                 исходный HTML-шаблон, CSS, app JS и workers
-src/parser-core.js   чистое ядро декодирования и парсинга
-src/parser.worker.js worker парсинга логов
-src/trace.worker.js  worker подготовки рядов
-vendor/              локальные browser-зависимости для офлайна
-tools/               build-инструменты
-tests/               Node regression-тесты
+build/               актуальный собранный проект для запуска
+data_base/           тестовые CSV/TXT логи
+dist/                архивные копии собранного проекта
 docs/                документация
 review/              внешние ревью проекта
-build/               генерируемый статический runtime
+src/                 исходники приложения: HTML-шаблон, CSS, JS и workers
+tests/               regression-тесты
+tools/               build-инструменты
+vendor/              локальные browser-зависимости для офлайна
 ```
 
-`build/` не хранится в Git. Single-file HTML и отдельные zip-сборки больше не собираются: один штатный runtime проще проверять и сопровождать.
+`build/` и `dist/` не хранятся в Git. Single-file HTML больше не собирается: штатный runtime всегда строится из `src/`.
 Версия runtime берётся из `package.json` при `npm run build`.
+
+`src/`, `tests/` и `tools/` нужны не конечному пользователю, а разработчику и ревьюеру: из `src/` собирается приложение, `tests/` проверяют регрессии, `tools/` содержит сборку.
+`.gitattributes`, `.gitignore`, `package.json`, `serve-local.ps1`, `.git/` и `.github/` — служебная часть проекта.
+
+## Архивная Копия В Dist
+
+```powershell
+npm run dist
+```
+
+Команда пересобирает `build`, затем кладёт копию в `dist/log-graph-build-YYYYMMDD-HHMMSS/` и zip рядом. Для запуска архивной копии открыть её папку и выполнить `serve-local.ps1`.
 
 ## Большие Логи
 

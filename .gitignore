@@ -1,7 +1,7 @@
 # Dependencies and package-manager state
 node_modules/
 
-# Build output and old local generated packages
+# Build output and archived runtime copies
 build/
 dist/
 *.zip

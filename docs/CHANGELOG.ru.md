@@ -46,4 +46,4 @@
 - Добавлен `build-manifest.json` с SHA-256 исходников и тесты, проверяющие отсутствие drift между source и server-runtime.
 - Версия приложения теперь подставляется из `package.json` во время сборки.
 - Runtime entrypoint теперь `index.html`; старые versioned standalone-имена считаются legacy.
-- Отдельный portable zip убран: переносимый комплект теперь сама папка `build` с `serve-local.ps1`.
+- Добавлен `npm run dist`: команда сохраняет timestamp-копию текущей папки `build` в `dist/` и создаёт zip.

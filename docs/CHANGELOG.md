@@ -46,4 +46,4 @@
 - Added `build-manifest.json` with SHA-256 input hashes and tests that guard against source/server drift.
 - App version is now injected from `package.json` during build.
 - Runtime entrypoint is now `index.html`; old versioned standalone names are legacy only.
-- Removed the separate portable zip; the transferable runtime is now the `build` folder with `serve-local.ps1`.
+- Added `npm run dist`: the command stores a timestamped copy of the current `build` folder in `dist/` and creates a zip.

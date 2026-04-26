@@ -7,16 +7,15 @@
 Проект теперь разделён на исходники и сборку:
 
 ```text
-src/                      исходный HTML-шаблон, CSS, app JS и workers
-src/parser-core.js        чистое ядро декодирования и парсинга
-src/parser.worker.js      worker парсера
-src/trace.worker.js       worker подготовки рядов
-vendor/                   локальный Plotly для офлайна
-tools/                    build-инструменты
-tests/                    regression-тесты
+build/                    актуальный собранный проект для запуска
+data_base/                тестовые CSV/TXT логи
+dist/                     архивные копии собранного проекта
 docs/                     документация
 review/                   внешние ревью проекта
-build/                    генерируемый статический runtime
+src/                      исходники приложения: HTML-шаблон, CSS, JS и workers
+tests/                    regression-тесты
+tools/                    build-инструменты
+vendor/                   локальный Plotly для офлайна
 ```
 
 Собрать артефакты:
@@ -37,6 +36,8 @@ python -m http.server 8080
 Статическая раздача обязательна для предсказуемой работы workers (`parser.worker.js`, `trace.worker.js`). Прямое открытие HTML больше не является поддерживаемым режимом: оно ломает модель workers и создаёт лишний релизный артефакт.
 
 Единственный source-of-truth для runtime — `src/index.template.html`, `src/styles.css`, `src/app.js`, `src/parser-core.js`, worker-файлы в `src/` и `package.json` с версией. `build` пересобирается командой `npm run build`; руками его не править. В `build/build-manifest.json` записываются SHA-256 исходников, а `npm test` проверяет, что HTML подключает внешний `app.js`.
+
+Папки `src/`, `tests/` и `tools/` нужны для разработки и ревью: `src/` содержит исходный код, `tests/` ловят регрессии, `tools/` собирает runtime. `.gitattributes`, `.gitignore`, `package.json`, `serve-local.ps1`, `.git/` и `.github/` — служебная часть проекта.
 
 ## Большие логи
 
@@ -101,7 +102,13 @@ powershell -ExecutionPolicy Bypass -File .\serve-local.ps1 -Port 8080
 powershell -ExecutionPolicy Bypass -File .\serve-local.ps1
 ```
 
-Отдельный пользовательский zip не собирается: архивирование папки `build` средствами ОС при необходимости достаточно и не создаёт второго релизного сценария.
+Если нужна архивная копия текущей сборки, выполнить:
+
+```powershell
+npm run dist
+```
+
+Команда пересобирает `build`, кладёт копию в `dist/log-graph-build-YYYYMMDD-HHMMSS/` и создаёт zip рядом. Это не второй runtime, а снимок текущей папки `build` для передачи или отката.
 
 ### Передача на ревью
 
