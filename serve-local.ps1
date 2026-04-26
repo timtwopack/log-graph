@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if ([string]::IsNullOrWhiteSpace($Root)) {
-  $BuiltRoot = Join-Path $PSScriptRoot 'dist\server'
+  $BuiltRoot = Join-Path $PSScriptRoot 'build'
   if (Test-Path (Join-Path $BuiltRoot 'index.html')) {
     $Root = $BuiltRoot
   } else {

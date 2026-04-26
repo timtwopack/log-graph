@@ -27,7 +27,7 @@
 - Preserve and mark same-`tag + timestamp` conflicts with different values/status as merge conflicts.
 - Save-with-rename now edits only exact header cells instead of replacing every matching substring in the header line.
 - Grouped parser accepts both Russian `Дата/Время` and English `Date/Time` headers.
-- Added `make-review-bundle.ps1` / `npm run review:bundle` so reviews receive the source bundle without generated/stale HTML.
+- Removed the separate review source bundle; review handoff now uses the repository link and commit SHA.
 - Added a regression test for UTF-16LE/UTF-16BE log decoding.
 - Added `signalKind` (`analog`, `binary`, `step`, `setpoint`) and per-parameter override in the sidebar.
 - Added quality filter for excluding non-good status points from charts, statistics, smoothing, and anomaly detection; `GOOD`, `GoodProvider`, `GoodLocalOverride`, and numeric `0` are treated as good quality.
@@ -41,9 +41,9 @@
 - Added session and marker import validation, size limits, and text normalization.
 - Added local diagnostics JSON export with performance samples and runtime errors.
 - Added Node test suite and GitHub Actions workflow.
-- Added the `src/`, `docs/`, `review/`, and `dist/server` structure.
+- Added the `src/`, `docs/`, `review/`, and `build` structure.
 - Added `tools/build.mjs` to build the single supported server runtime.
 - Added `build-manifest.json` with SHA-256 input hashes and tests that guard against source/server drift.
 - App version is now injected from `package.json` during build.
 - Runtime entrypoint is now `index.html`; old versioned standalone names are legacy only.
-- Portable zip is now only a package of the supported server runtime plus `serve-local.ps1`.
+- Removed the separate portable zip; the transferable runtime is now the `build` folder with `serve-local.ps1`.

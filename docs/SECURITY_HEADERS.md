@@ -12,15 +12,15 @@ add_header Cross-Origin-Opener-Policy "same-origin" always;
 add_header Cross-Origin-Embedder-Policy "require-corp" always;
 add_header Cross-Origin-Resource-Policy "same-origin" always;
 
-# dist/server loads Plotly/app/styles from local files. JS event wiring is external;
+# build loads Plotly/app/styles from local files. JS event wiring is external;
 # style-src still allows inline styles because Plotly and the current layout use style attributes.
 add_header Content-Security-Policy "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" always;
 ```
 
 ## Notes
 
-- `dist/server` is the single supported runtime.
-- `serve-local.ps1` emits the same CSP for the portable local-server path.
+- `build` is the single supported runtime.
+- `serve-local.ps1` emits the same CSP for the local-server path.
 - `worker-src 'self'` is required for `parser.worker.js` and `trace.worker.js`.
 - `img-src blob: data:` is required for PNG export and Plotly image generation.
 - `connect-src 'none'` documents the intended no-network posture.

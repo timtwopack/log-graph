@@ -27,7 +27,7 @@
 - Конфликты с одинаковыми `tag + timestamp`, но разными значениями/status, сохраняются и помечаются как merge-conflict.
 - Сохранение файла с переименованными тегами меняет только точные ячейки заголовка, а не все вхождения строки в header.
 - Grouped parser принимает и русские `Дата/Время`, и английские `Date/Time` заголовки.
-- Добавлен `make-review-bundle.ps1` / `npm run review:bundle`, чтобы на ревью отправлялся source bundle без generated/stale HTML.
+- Отдельный source bundle для ревью убран; для ревью используется ссылка на репозиторий и commit.
 - Добавлен regression-тест декодирования UTF-16LE/UTF-16BE логов.
 - Добавлен `signalKind` (`analog`, `binary`, `step`, `setpoint`) и ручной выбор типа сигнала в сайдбаре.
 - Добавлен фильтр качества для исключения non-good status точек из графиков, статистики, сглаживания и поиска аномалий; `GOOD`, `GoodProvider`, `GoodLocalOverride` и числовой `0` считаются хорошим качеством.
@@ -41,9 +41,9 @@
 - Импорт сессий и маркеров получил validation, size limits и нормализацию текста.
 - Добавлен локальный экспорт диагностики с performance samples и runtime errors.
 - Добавлены Node-тесты и GitHub Actions workflow.
-- Введена структура `src/` + `docs/` + `review/` + `dist/server`.
+- Введена структура `src/` + `docs/` + `review/` + `build`.
 - Добавлен `tools/build.mjs`, который собирает единственный штатный server-runtime.
 - Добавлен `build-manifest.json` с SHA-256 исходников и тесты, проверяющие отсутствие drift между source и server-runtime.
 - Версия приложения теперь подставляется из `package.json` во время сборки.
 - Runtime entrypoint теперь `index.html`; старые versioned standalone-имена считаются legacy.
-- Portable zip теперь является только упаковкой штатного server-runtime с `serve-local.ps1`.
+- Отдельный portable zip убран: переносимый комплект теперь сама папка `build` с `serve-local.ps1`.

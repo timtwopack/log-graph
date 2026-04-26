@@ -6,15 +6,13 @@ This document captures the current project state before the next full code/archi
 
 - Source: `src/`, `tools/`, `tests/`, `vendor/`, `.github/`.
 - Documentation: `README.md`, `docs/`, `review/`.
-- Generated runtime is not the source of truth: `dist/server` is rebuilt from source.
+- Generated runtime is not the source of truth: `build` is rebuilt from source.
 - The old `log-graph-v091.html` artifact is not required and is not stored in Git.
 
 ## Commands
 
 ```powershell
 npm test
-powershell -ExecutionPolicy Bypass -File .\make-portable.ps1
-npm run review:bundle
 ```
 
 For manual testing:

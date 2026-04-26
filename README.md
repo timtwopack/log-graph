@@ -1,6 +1,6 @@
 # PA-GRAPH / log-graph
 
-Офлайн-графопостроитель для SCADA/PLC логов. Штатный запуск — статическая раздача `dist/server`.
+Офлайн-графопостроитель для SCADA/PLC логов. Штатный запуск — статическая раздача папки `build`.
 
 ## Быстрый Запуск
 
@@ -23,10 +23,10 @@ tools/               build-инструменты
 tests/               Node regression-тесты
 docs/                документация
 review/              внешние ревью проекта
-dist/server/         генерируемый статический runtime
+build/               генерируемый статический runtime
 ```
 
-`dist/` не хранится в Git. Single-file HTML больше не собирается: один штатный runtime проще проверять и сопровождать.
+`build/` не хранится в Git. Single-file HTML и отдельные zip-сборки больше не собираются: один штатный runtime проще проверять и сопровождать.
 Версия runtime берётся из `package.json` при `npm run build`.
 
 ## Большие Логи
@@ -53,10 +53,6 @@ dist/server/         генерируемый статический runtime
 npm test
 ```
 
-## Bundle Для Ревью
+## Ревью
 
-```powershell
-npm run review:bundle
-```
-
-Архив `dist/log-graph-review-source-*.zip` содержит исходники, тесты, документацию, `vendor/`, `.github/` и маленький sample. Он намеренно не содержит `dist/`, `.git/`, generated HTML и production-логи.
+Для ревью достаточно ссылки на репозиторий. Проверять нужно исходники, тесты и документацию; `build/` является генерируемым runtime и пересобирается командой `npm run build`.

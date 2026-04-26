@@ -16,7 +16,7 @@ tools/                    build-инструменты
 tests/                    regression-тесты
 docs/                     документация
 review/                   внешние ревью проекта
-dist/server/              генерируемый статический runtime
+build/                    генерируемый статический runtime
 ```
 
 Собрать артефакты:
@@ -25,10 +25,10 @@ dist/server/              генерируемый статический runtim
 npm run build
 ```
 
-Штатный режим — раздать `dist/server` как статический сайт:
+Штатный режим — раздать `build` как статический сайт:
 
 ```bash
-cd dist/server
+cd build
 python -m http.server 8080
 ```
 
@@ -36,7 +36,7 @@ python -m http.server 8080
 
 Статическая раздача обязательна для предсказуемой работы workers (`parser.worker.js`, `trace.worker.js`). Прямое открытие HTML больше не является поддерживаемым режимом: оно ломает модель workers и создаёт лишний релизный артефакт.
 
-Единственный source-of-truth для runtime — `src/index.template.html`, `src/styles.css`, `src/app.js`, `src/parser-core.js`, worker-файлы в `src/` и `package.json` с версией. `dist/server` пересобирается командой `npm run build`; руками его не править. В `dist/server/build-manifest.json` записываются SHA-256 исходников, а `npm test` проверяет, что server-HTML подключает внешний `app.js`.
+Единственный source-of-truth для runtime — `src/index.template.html`, `src/styles.css`, `src/app.js`, `src/parser-core.js`, worker-файлы в `src/` и `package.json` с версией. `build` пересобирается командой `npm run build`; руками его не править. В `build/build-manifest.json` записываются SHA-256 исходников, а `npm test` проверяет, что HTML подключает внешний `app.js`.
 
 ## Большие логи
 
@@ -63,7 +63,7 @@ python -m http.server 8080
 Для работы графопостроителя на другом ПК нужны только runtime-файлы:
 
 ```text
-dist/server/
+build/
 index.html
 styles.css
 app.js
@@ -71,14 +71,9 @@ parser-core.js
 parser.worker.js
 trace.worker.js
 build-manifest.json
+serve-local.ps1
 vendor/
   plotly-3.5.0.min.js
-```
-
-Для удобного переносимого запуска рекомендуется добавить:
-
-```text
-serve-local.ps1
 docs/
 ```
 
@@ -92,31 +87,25 @@ docs/
 powershell -ExecutionPolicy Bypass -File .\serve-local.ps1
 ```
 
-В dev-папке скрипт автоматически отдаёт `dist/server`. В portable-папке он отдаёт текущую папку. Скрипт поднимает локальный сервер на `127.0.0.1:8765` и открывает приложение. Порт можно изменить:
+В dev-папке скрипт автоматически отдаёт `build`. Если запустить копию скрипта внутри самой папки `build`, он отдаёт текущую папку. Скрипт поднимает локальный сервер на `127.0.0.1:8765` и открывает приложение. Порт можно изменить:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\serve-local.ps1 -Port 8080
 ```
 
-### Сборка portable zip
+### Перенос на другой ПК
+
+После `npm run build` скопировать папку `build` целиком. На другом ПК запустить из неё:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\make-portable.ps1
+powershell -ExecutionPolicy Bypass -File .\serve-local.ps1
 ```
 
-Архив появится в `dist/pa-graph-portable-*.zip`. Это не отдельная версия приложения, а zip-упаковка того же `dist/server` плюс `serve-local.ps1` для переноса на другой ПК. По умолчанию production-логи и sample-файлы не включаются. Если нужен маленький тестовый sample:
+Отдельный пользовательский zip не собирается: архивирование папки `build` средствами ОС при необходимости достаточно и не создаёт второго релизного сценария.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\make-portable.ps1 -IncludeSamples
-```
+### Передача на ревью
 
-### Сборка архива для ревью
-
-```powershell
-npm run review:bundle
-```
-
-Архив появится в `dist/log-graph-review-source-*.zip`. Его нужно отправлять на code/architecture review: в нём есть source, docs, tests, CI, vendor и маленький sample. В нём намеренно нет `dist/`, `.git/`, generated HTML и production-логов, чтобы ревью не анализировало старый standalone вместо исходников.
+Для code/architecture review отправлять ссылку на репозиторий и номер commit. Отдельный source-bundle не нужен: ревьюер должен смотреть `src/`, `tests/`, `tools/`, `docs/`, `vendor/`, `.github/` и запускать `npm test`.
 
 ## Тесты
 

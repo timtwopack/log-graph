@@ -6,15 +6,13 @@
 
 - Исходники: `src/`, `tools/`, `tests/`, `vendor/`, `.github/`.
 - Документацию: `README.md`, `docs/`, `review/`.
-- Генерируемый runtime не ревьюить как source of truth: `dist/server` пересобирается из исходников.
+- Генерируемый runtime не ревьюить как source of truth: `build` пересобирается из исходников.
 - Старый `log-graph-v091.html` не нужен и не хранится в Git.
 
 ## Команды
 
 ```powershell
 npm test
-powershell -ExecutionPolicy Bypass -File .\make-portable.ps1
-npm run review:bundle
 ```
 
 Для ручной проверки:

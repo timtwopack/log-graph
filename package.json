@@ -3,7 +3,6 @@
   "version": "0.9.1",
   "scripts": {
     "build": "node tools/build.mjs",
-    "review:bundle": "powershell -ExecutionPolicy Bypass -File ./make-review-bundle.ps1",
     "test": "npm run build && node --test tests/loggraph-core.test.mjs"
   },
   "devDependencies": {}

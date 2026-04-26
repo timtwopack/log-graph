@@ -2,10 +2,10 @@
 
 ## Local Launch
 
-Build first, then serve `dist/server` as static files. Direct browser opening is not a supported runtime mode.
+Build first, then serve `build` as static files. Direct browser opening is not a supported runtime mode.
 
 ```bash
-cd dist/server
+cd build
 python -m http.server 8080
 ```
 
@@ -17,7 +17,7 @@ Open `http://localhost:8080/index.html`.
 - When the browser supports `File.stream()`, the worker reads the log as a stream and the main thread does not build a full `arrayBuffer()` for the file.
 - Maximum input file size is 8 GiB. This is an application guardrail, not a promise that every workstation can handle every 8 GiB log.
 - For files larger than 25 MiB, the app does not retain the full source text in memory. Charts, CSV export, sessions, and diagnostics use parsed series, but save-with-renamed-tags is disabled.
-- For moving work between PCs, export a `.pagraph.json.gz` session instead of putting source logs into the portable zip.
+- For moving work between PCs, export a `.pagraph.json.gz` session instead of putting source logs next to the runtime.
 
 ## Time And Quality
 
@@ -36,13 +36,7 @@ Expected result: all tests pass.
 
 ## Review Handoff
 
-For code/architecture review, build the source bundle:
-
-```powershell
-npm run review:bundle
-```
-
-Send `dist/log-graph-review-source-*.zip`. Do not send a standalone `log-graph-v091.html` from older builds; the current entrypoint is generated as `dist/server/index.html` and should be checked through `npm run build`.
+For code/architecture review, send the repository link and commit SHA. Do not send a standalone `log-graph-v091.html` from older builds; the current entrypoint is generated as `build/index.html` and should be checked through `npm run build`.
 
 Before a full review, include `docs/REVIEW_READINESS.md`; it lists closed items, intentional tradeoffs, and remaining large topics.
 
@@ -90,4 +84,4 @@ No diagnostics are sent over the network by the app.
 5. Export `CSV сырой long` and confirm `°C`, epoch µs, time source, and merge-conflict columns are preserved.
 6. Save a browser session and export a session file.
 7. Reload the page and import the session file.
-8. Check `dist/server/build-manifest.json`; the SHA-256 values for source files and `package.json` must match the current checkout.
+8. Check `build/build-manifest.json`; the SHA-256 values for source files, `serve-local.ps1`, and `package.json` must match the current checkout.

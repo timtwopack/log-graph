@@ -1,10 +1,11 @@
 # Dependencies and package-manager state
 node_modules/
 
-# Build output and generated portable packages
+# Build output and old local generated packages
+build/
 dist/
 *.zip
-# Legacy root standalone artifact from older builds; current runtime lives in dist/server.
+# Legacy root standalone artifact from older builds; current runtime lives in build/.
 log-graph-v091.html
 
 # Local input logs and plant data.

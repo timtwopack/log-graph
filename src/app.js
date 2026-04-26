@@ -1804,7 +1804,7 @@ async function parseFilePayload(file){
     throw new Error('файл слишком большой: ' + Math.round(file.size / 1024 / 1024) + ' МБ');
   }
   if(location.protocol === 'file:'){
-    throw new Error('приложение нужно запускать через статический сервер: используйте serve-local.ps1 или dist/server');
+    throw new Error('приложение нужно запускать через статический сервер: используйте serve-local.ps1 или папку build');
   }
   if(typeof Worker !== 'function'){
     throw new Error('браузер не поддерживает Web Workers; парсинг доступен только через parser.worker.js');

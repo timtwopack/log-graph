@@ -13,9 +13,9 @@ const templateSource = readFileSync(new URL('../src/index.template.html', import
 const styleSource = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const packageSource = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
 const serveLocalSource = readFileSync(new URL('../serve-local.ps1', import.meta.url), 'utf8');
-const serverHtml = readFileSync(new URL('../dist/server/index.html', import.meta.url), 'utf8');
-const builtAppSource = readFileSync(new URL('../dist/server/app.js', import.meta.url), 'utf8');
-const buildManifest = JSON.parse(readFileSync(new URL('../dist/server/build-manifest.json', import.meta.url), 'utf8'));
+const serverHtml = readFileSync(new URL('../build/index.html', import.meta.url), 'utf8');
+const builtAppSource = readFileSync(new URL('../build/app.js', import.meta.url), 'utf8');
+const buildManifest = JSON.parse(readFileSync(new URL('../build/build-manifest.json', import.meta.url), 'utf8'));
 const packageJson = JSON.parse(packageSource);
 
 function extractFunction(src, name) {
@@ -144,6 +144,7 @@ test('build manifest matches the current source files', () => {
   assert.equal(buildManifest.sources['src/styles.css'], sha256(styleSource));
   assert.equal(buildManifest.sources['src/app.js'], sha256(appSource));
   assert.equal(buildManifest.sources['package.json'], sha256(packageSource));
+  assert.equal(buildManifest.sources['serve-local.ps1'], sha256(serveLocalSource));
   assert.equal(buildManifest.sources['src/parser-core.js'], sha256(parserCoreSource));
   assert.equal(buildManifest.sources['src/parser.worker.js'], sha256(parserWorkerSource));
   assert.equal(buildManifest.sources['src/trace.worker.js'], sha256(traceWorkerSource));
@@ -423,7 +424,7 @@ test('external trace worker prepares downsampled trace', () => {
 });
 
 test('built runtime assets are fetchable over HTTP', async t => {
-  const {server, baseUrl} = await startStaticServer(new URL('../dist/server/', import.meta.url));
+  const {server, baseUrl} = await startStaticServer(new URL('../build/', import.meta.url));
   t.after(() => server.close());
   for(const path of ['/index.html', '/app.js', '/parser-core.js', '/parser.worker.js', '/trace.worker.js', '/vendor/plotly-3.5.0.min.js']){
     const res = await fetch(baseUrl + path);
