@@ -43,6 +43,8 @@ npm run review:bundle
 
 Send `dist/log-graph-review-source-*.zip`. Do not send a standalone `log-graph-v091.html` from older builds; the current entrypoint is generated as `dist/server/index.html` and should be checked through `npm run build`.
 
+Before a full review, include `docs/REVIEW_READINESS.md`; it lists closed items, intentional tradeoffs, and remaining large topics.
+
 ## Browser Storage
 
 Sessions are stored in IndexedDB only after the user selects save/import. Presets and markers use localStorage. To clear all local state:

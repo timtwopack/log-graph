@@ -9,6 +9,8 @@
 - Added optional `trace.worker.js` precompute path for initial downsampling/cache warmup.
 - Added a streaming large-file import path through `File.stream()` and incremental `TextDecoder` inside `parser.worker.js`; the main thread no longer has to read the full file into an `arrayBuffer()`.
 - Raised the input-file guardrail to 8 GiB; full source text is retained only up to 25 MiB, so save-with-renamed-tags is disabled for large logs.
+- Parser results are transferred from `parser.worker.js` as columnar typed arrays through a transfer-list; the main thread inflates them into the current UI data structure.
+- Optional `trace.worker.js` precompute now skips large datasets to avoid structured-cloning hundreds of thousands of point objects immediately after import.
 - Expanded encoding sniffing to 64 KiB so short binary/ASCII prefixes do not dominate UTF-8/CP1251/UTF-16 detection.
 - Preserved grouped-format `status` values per point.
 - Preserved optional epoch timestamp as `epochUs` and use it as the timestamp source of truth; local date/time columns remain the fallback.

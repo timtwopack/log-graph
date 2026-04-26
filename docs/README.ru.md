@@ -147,3 +147,4 @@ npm test
 - `docs/SECURITY_HEADERS.ru.md` — шаблон заголовков для статического хостинга.
 - `docs/CHANGELOG.ru.md` — список изменений после ревью.
 - `docs/RELEASE_NOTES.ru.md` — краткое описание hardened-сборки.
+- `docs/REVIEW_READINESS.ru.md` — памятка для следующего полного ревью.

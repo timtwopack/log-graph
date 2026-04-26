@@ -42,6 +42,7 @@ dist/server/         генерируемый статический runtime
 - [RUNBOOK.ru.md](docs/RUNBOOK.ru.md)
 - [CHANGELOG.ru.md](docs/CHANGELOG.ru.md)
 - [RELEASE_NOTES.ru.md](docs/RELEASE_NOTES.ru.md)
+- [REVIEW_READINESS.ru.md](docs/REVIEW_READINESS.ru.md)
 - [SECURITY_HEADERS.ru.md](docs/SECURITY_HEADERS.ru.md)
 
 ## Проверка

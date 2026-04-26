@@ -120,8 +120,9 @@ test('external trace worker is syntactically valid', () => {
 
 test('external parser worker parses sample log', async () => {
   let posted = null;
+  let postedTransfer = null;
   const ctx = {
-    self: { postMessage: msg => { posted = msg; } },
+    self: { postMessage: (msg, transfer) => { posted = msg; postedTransfer = transfer || []; } },
     importScripts: (...paths) => {
       for(const path of paths){
         if(path !== 'parser-core.js') throw new Error(`unexpected importScripts path: ${path}`);
@@ -135,11 +136,18 @@ test('external parser worker parses sample log', async () => {
     RegExp,
     String,
     Array,
+    Map,
     Object,
-    Set
+    Set,
+    Float64Array,
+    Int32Array,
+    Uint8Array,
+    BigInt64Array,
+    BigInt
   };
   vm.createContext(ctx);
   vm.runInContext(parserWorkerSource, ctx);
+  const app = loadAppCore(['inflateWorkerParams']);
   const sample = readFileSync(new URL('../data_base/test_base.txt', import.meta.url));
   ctx.self.onmessage({ data: { buffer: sample.buffer.slice(sample.byteOffset, sample.byteOffset + sample.byteLength), keepText: true } });
   await new Promise((resolve, reject) => {
@@ -152,10 +160,16 @@ test('external parser worker parses sample log', async () => {
     tick();
   });
   assert.equal(posted.error, null);
-  assert.ok(posted.params.length > 0);
+  assert.ok(posted.paramsColumnar.length > 0);
+  assert.ok(postedTransfer.length >= posted.paramsColumnar.length * 2);
+  let params = app.inflateWorkerParams(posted);
+  assert.ok(params.length > 0);
+  assert.ok(params[0].data.length > 0);
+  assert.ok(params.some(p => p.data.some(d => d.epochRaw === '1774155600000000' && d.epochUs === 1774155600000000)));
   assert.ok(posted.text.length > 0);
 
   posted = null;
+  postedTransfer = null;
   ctx.self.onmessage({ data: { buffer: sample.buffer.slice(sample.byteOffset, sample.byteOffset + sample.byteLength), keepText: false } });
   await new Promise((resolve, reject) => {
     const started = Date.now();
@@ -168,8 +182,11 @@ test('external parser worker parses sample log', async () => {
   });
   assert.equal(posted.error, null);
   assert.equal(posted.text, '');
+  params = app.inflateWorkerParams(posted);
+  assert.ok(params.length > 0);
 
   posted = null;
+  postedTransfer = null;
   ctx.self.onmessage({ data: { file: new File([sample], 'sample.txt'), keepText: false } });
   await new Promise((resolve, reject) => {
     const started = Date.now();
@@ -181,8 +198,31 @@ test('external parser worker parses sample log', async () => {
     tick();
   });
   assert.equal(posted.error, null);
-  assert.ok(posted.params.length > 0);
+  params = app.inflateWorkerParams(posted);
+  assert.ok(params.length > 0);
   assert.equal(posted.text, '');
+});
+
+test('worker columnar params inflate status, epoch, and time source', () => {
+  const app = loadAppCore(['inflateWorkerParams']);
+  const params = app.inflateWorkerParams({
+    paramsColumnar: [{
+      meta: {tag: 'TAG [bar]', unit: 'bar', length: 2, timezone: 'epoch', timeSource: 'epoch'},
+      ts: new Float64Array([10, 20]),
+      val: new Float64Array([1.5, 2.5]),
+      statusValues: ['GOOD'],
+      statusCodes: new Int32Array([0, -1]),
+      epochUs: new Float64Array([1000000, NaN]),
+      epochRaw: new BigInt64Array([1000000n, 0n]),
+      epochRawMask: new Uint8Array([1, 0]),
+      timeSourceCodes: new Uint8Array([0, 2])
+    }]
+  });
+  assert.equal(params[0].tag, 'TAG [bar]');
+  assert.equal(params[0].data[0].status, 'GOOD');
+  assert.equal(params[0].data[0].epochRaw, '1000000');
+  assert.equal(params[0].data[0].timeSource, 'epoch');
+  assert.equal(params[0].data[1].timeSource, 'local');
 });
 
 test('external trace worker prepares downsampled trace', () => {

@@ -160,6 +160,7 @@ const MAX_PTS = 5000;
 const WEBGL_THRESHOLD = 2000; /* use WebGL for traces above this many points — much faster zoom/pan */
 const MAX_INPUT_FILE_BYTES = 8 * 1024 * 1024 * 1024;
 const MAX_STORED_TEXT_BYTES = 25 * 1024 * 1024;
+const TRACE_WORKER_MAX_CLONE_POINTS = 250000;
 const MAX_SESSION_JSON_BYTES = 180 * 1024 * 1024;
 const MAX_SESSION_PARAMS = 3000;
 const MAX_SESSION_POINTS = 12_000_000;
@@ -1309,6 +1310,36 @@ function mergeParsedParams(params, ex){
   }
   return {p: mg, e: null, conflicts: mg.reduce((sum, p) => sum + (p.mergeConflicts || 0), 0)};
 }
+function inflateWorkerParams(data){
+  if(Array.isArray(data && data.params)) return data.params;
+  const packed = data && Array.isArray(data.paramsColumnar) ? data.paramsColumnar : [];
+  return packed.map(item => {
+    const meta = Object.assign({}, item.meta || {});
+    const len = Number(meta.length || (item.ts ? item.ts.length : 0)) || 0;
+    delete meta.length;
+    const ts = item.ts || [];
+    const val = item.val || [];
+    const statusCodes = item.statusCodes || null;
+    const statusValues = Array.isArray(item.statusValues) ? item.statusValues : [];
+    const epochUs = item.epochUs || null;
+    const epochRaw = item.epochRaw || null;
+    const epochRawMask = item.epochRawMask || null;
+    const timeSourceCodes = item.timeSourceCodes || null;
+    const defaultTimeSource = meta.timeSource || meta.timezone || 'local';
+    const points = new Array(len);
+    for(let i = 0; i < len; i++){
+      const point = {ts: ts[i], val: val[i]};
+      if(statusCodes && statusCodes[i] >= 0) point.status = statusValues[statusCodes[i]] || '';
+      if(epochUs && Number.isFinite(epochUs[i])) point.epochUs = epochUs[i];
+      if(epochRaw && epochRawMask && epochRawMask[i]) point.epochRaw = String(epochRaw[i]);
+      if(timeSourceCodes && timeSourceCodes[i]) point.timeSource = timeSourceCodes[i] === 1 ? 'epoch' : 'local';
+      else if(defaultTimeSource && defaultTimeSource !== 'local') point.timeSource = defaultTimeSource;
+      points[i] = point;
+    }
+    meta.data = points;
+    return meta;
+  });
+}
 async function parseFilePayload(file){
   if(file.size > MAX_INPUT_FILE_BYTES){
     throw new Error('файл слишком большой: ' + Math.round(file.size / 1024 / 1024) + ' МБ');
@@ -1336,7 +1367,7 @@ async function parseFilePayload(file){
       cleanup();
       const data = ev.data || {};
       if(data.error) reject(new Error(data.error));
-      else resolve({file, text: data.text || '', textStored: keepText && typeof data.text === 'string', encoding: data.encoding, bom: !!data.bom, headerIdx: data.headerIdx, params: data.params || []});
+      else resolve({file, text: data.text || '', textStored: keepText && typeof data.text === 'string', encoding: data.encoding, bom: !!data.bom, headerIdx: data.headerIdx, params: inflateWorkerParams(data)});
     };
     worker.onerror = ev => {
       clearTimeout(timer);
@@ -1395,6 +1426,11 @@ async function precomputeTraceCacheForParams(params){
   if(location.protocol === 'file:' || typeof Worker !== 'function' || !params || !params.length) return;
   if(S.view.SMOOTH_TYPE !== 'none' || S.anomaly.ANOMALY_ON) return;
   const started = performance.now();
+  const rawPointCount = params.reduce((sum, p) => sum + ((p.data && p.data.length) || 0), 0);
+  if(rawPointCount > TRACE_WORKER_MAX_CLONE_POINTS){
+    recordPerf('trace-precompute-skip-large', started, {params: params.length, points: rawPointCount});
+    return;
+  }
   const items = params.filter(p => p.data && p.data.length).map(p => ({
     key: _ptdKey(p),
     param: {

@@ -4,6 +4,81 @@ importScripts('parser-core.js');
 
 const Parser = self.LogGraphParser;
 
+function copyParamMeta(param, length){
+  const meta = {};
+  for(const key of Object.keys(param)){
+    if(key === 'data') continue;
+    meta[key] = param[key];
+  }
+  meta.length = length;
+  return meta;
+}
+function packParamsForTransfer(params){
+  const packed = [];
+  const transfer = [];
+  for(const param of params || []){
+    const data = param.data || [];
+    const len = data.length;
+    const ts = new Float64Array(len);
+    const val = new Float64Array(len);
+    let statusCodes = null;
+    const statusValues = [];
+    const statusMap = new Map();
+    let epochUs = null;
+    let epochRaw = null;
+    let epochRawMask = null;
+    let timeSourceCodes = null;
+    const defaultTimeSource = param.timeSource || param.timezone || 'local';
+
+    for(let i = 0; i < len; i++){
+      const point = data[i];
+      ts[i] = point.ts;
+      val[i] = point.val;
+      if(point.status){
+        if(!statusCodes){
+          statusCodes = new Int32Array(len);
+          statusCodes.fill(-1);
+        }
+        if(!statusMap.has(point.status)){
+          statusMap.set(point.status, statusValues.length);
+          statusValues.push(point.status);
+        }
+        statusCodes[i] = statusMap.get(point.status);
+      }
+      if(point.epochUs != null){
+        if(!epochUs){
+          epochUs = new Float64Array(len);
+          epochUs.fill(NaN);
+        }
+        epochUs[i] = point.epochUs;
+      }
+      if(point.epochRaw && typeof BigInt64Array === 'function' && typeof BigInt === 'function'){
+        if(!epochRaw){
+          epochRaw = new BigInt64Array(len);
+          epochRawMask = new Uint8Array(len);
+        }
+        try{
+          epochRaw[i] = BigInt(point.epochRaw);
+          epochRawMask[i] = 1;
+        }catch(_e){}
+      }
+      if(point.timeSource && point.timeSource !== defaultTimeSource){
+        if(!timeSourceCodes) timeSourceCodes = new Uint8Array(len);
+        timeSourceCodes[i] = point.timeSource === 'epoch' ? 1 : 2;
+      }
+    }
+
+    const item = {meta: copyParamMeta(param, len), ts, val, statusValues};
+    transfer.push(ts.buffer, val.buffer);
+    if(statusCodes){ item.statusCodes = statusCodes; transfer.push(statusCodes.buffer); }
+    if(epochUs){ item.epochUs = epochUs; transfer.push(epochUs.buffer); }
+    if(epochRaw && epochRawMask){ item.epochRaw = epochRaw; item.epochRawMask = epochRawMask; transfer.push(epochRaw.buffer, epochRawMask.buffer); }
+    if(timeSourceCodes){ item.timeSourceCodes = timeSourceCodes; transfer.push(timeSourceCodes.buffer); }
+    packed.push(item);
+  }
+  return {paramsColumnar: packed, transfer};
+}
+
 async function parseFileStream(file, keepText){
   const sampleSize = Math.min(file.size, 65536);
   const sampleBytes = new Uint8Array(await file.slice(0, sampleSize).arrayBuffer());
@@ -53,15 +128,16 @@ self.onmessage = function(e){
     const result = e.data.file && typeof e.data.file.stream === 'function'
       ? await parseFileStream(e.data.file, keepText)
       : parseBuffer(e.data.buffer, keepText);
+    const packed = packParamsForTransfer(result.params);
     self.postMessage({
       text: result.text,
       encoding: result.encoding,
       bom: result.bom,
       headerIdx: result.headerIdx,
-      params: result.params,
+      paramsColumnar: packed.paramsColumnar,
       error: result.error
-    });
+    }, packed.transfer);
   }).catch(err => {
-    self.postMessage({text: '', encoding: '', headerIdx: 0, params: [], error: err && err.message ? err.message : String(err)});
+    self.postMessage({text: '', encoding: '', headerIdx: 0, paramsColumnar: [], error: err && err.message ? err.message : String(err)});
   });
 };
