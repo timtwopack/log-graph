@@ -19,8 +19,9 @@ function packParamsForTransfer(params){
   for(const param of params || []){
     const data = param.data || [];
     const len = data.length;
-    const ts = new Float64Array(len);
-    const val = new Float64Array(len);
+    const hasParserColumns = data && data._columnar && data._ts && data._val;
+    const ts = hasParserColumns ? data._ts.slice(0, len) : new Float64Array(len);
+    const val = hasParserColumns ? data._val.slice(0, len) : new Float64Array(len);
     let statusCodes = null;
     const statusValues = [];
     const statusMap = new Map();
@@ -28,43 +29,68 @@ function packParamsForTransfer(params){
     let epochRaw = null;
     let epochRawMask = null;
     let timeSourceCodes = null;
+    const timeSourceValues = ['epoch', 'local'];
+    let sourceFileCodes = null;
+    const sourceFileValues = [];
+    const sourceFileMap = new Map();
     const defaultTimeSource = param.timeSource || param.timezone || 'local';
 
     for(let i = 0; i < len; i++){
-      const point = data[i];
-      ts[i] = point.ts;
-      val[i] = point.val;
-      if(point.status){
+      const point = hasParserColumns ? null : data[i];
+      const status = hasParserColumns ? data._status[i] : point.status;
+      const pointEpochUs = hasParserColumns ? data._epochUs[i] : point.epochUs;
+      const pointEpochRaw = hasParserColumns ? data._epochRaw[i] : point.epochRaw;
+      const pointTimeSource = hasParserColumns ? data._timeSource[i] : point.timeSource;
+      const pointSourceFile = hasParserColumns ? '' : point.sourceFile;
+      if(!hasParserColumns){
+        ts[i] = point.ts;
+        val[i] = point.val;
+      }
+      if(status){
         if(!statusCodes){
           statusCodes = new Int32Array(len);
           statusCodes.fill(-1);
         }
-        if(!statusMap.has(point.status)){
-          statusMap.set(point.status, statusValues.length);
-          statusValues.push(point.status);
+        if(!statusMap.has(status)){
+          statusMap.set(status, statusValues.length);
+          statusValues.push(status);
         }
-        statusCodes[i] = statusMap.get(point.status);
+        statusCodes[i] = statusMap.get(status);
       }
-      if(point.epochUs != null){
+      if(pointEpochUs != null && Number.isFinite(pointEpochUs)){
         if(!epochUs){
           epochUs = new Float64Array(len);
           epochUs.fill(NaN);
         }
-        epochUs[i] = point.epochUs;
+        epochUs[i] = pointEpochUs;
       }
-      if(point.epochRaw && typeof BigInt64Array === 'function' && typeof BigInt === 'function'){
+      if(pointEpochRaw && typeof BigInt64Array === 'function' && typeof BigInt === 'function'){
         if(!epochRaw){
           epochRaw = new BigInt64Array(len);
           epochRawMask = new Uint8Array(len);
         }
         try{
-          epochRaw[i] = BigInt(point.epochRaw);
+          epochRaw[i] = BigInt(pointEpochRaw);
           epochRawMask[i] = 1;
         }catch(_e){}
       }
-      if(point.timeSource && point.timeSource !== defaultTimeSource){
-        if(!timeSourceCodes) timeSourceCodes = new Uint8Array(len);
-        timeSourceCodes[i] = point.timeSource === 'epoch' ? 1 : 2;
+      if(pointTimeSource && pointTimeSource !== defaultTimeSource){
+        if(!timeSourceCodes){
+          timeSourceCodes = new Int32Array(len);
+          timeSourceCodes.fill(-1);
+        }
+        timeSourceCodes[i] = pointTimeSource === 'epoch' ? 0 : 1;
+      }
+      if(pointSourceFile){
+        if(!sourceFileCodes){
+          sourceFileCodes = new Int32Array(len);
+          sourceFileCodes.fill(-1);
+        }
+        if(!sourceFileMap.has(pointSourceFile)){
+          sourceFileMap.set(pointSourceFile, sourceFileValues.length);
+          sourceFileValues.push(pointSourceFile);
+        }
+        sourceFileCodes[i] = sourceFileMap.get(pointSourceFile);
       }
     }
 
@@ -73,7 +99,8 @@ function packParamsForTransfer(params){
     if(statusCodes){ item.statusCodes = statusCodes; transfer.push(statusCodes.buffer); }
     if(epochUs){ item.epochUs = epochUs; transfer.push(epochUs.buffer); }
     if(epochRaw && epochRawMask){ item.epochRaw = epochRaw; item.epochRawMask = epochRawMask; transfer.push(epochRaw.buffer, epochRawMask.buffer); }
-    if(timeSourceCodes){ item.timeSourceCodes = timeSourceCodes; transfer.push(timeSourceCodes.buffer); }
+    if(timeSourceCodes){ item.timeSourceCodes = timeSourceCodes; item.timeSourceValues = timeSourceValues; transfer.push(timeSourceCodes.buffer); }
+    if(sourceFileCodes){ item.sourceFileCodes = sourceFileCodes; item.sourceFileValues = sourceFileValues; transfer.push(sourceFileCodes.buffer); }
     packed.push(item);
   }
   return {paramsColumnar: packed, transfer};

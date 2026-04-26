@@ -21,7 +21,8 @@ This build focuses on production-readiness issues found in the review of `log-gr
 - On browsers with `File.stream()`, large files are streamed directly in the worker without a full main-thread `arrayBuffer()`.
 - The input-file guardrail is now 8 GiB; full source text is retained only for files up to 25 MiB.
 - Parser results leave the worker as columnar typed arrays through a transfer-list, avoiding structured clone of the full point-object tree.
-- Background trace precompute skips large datasets while the UI still stores points as objects.
+- Main application state now stores points through `ColumnarData` instead of object arrays.
+- Background trace precompute skips large datasets to avoid creating temporary object arrays immediately after import.
 - Multi-file loading is bounded to one or two concurrent parse jobs to reduce large-log memory peaks.
 - Initial trace downsampling can be precomputed in `trace.worker.js` when served over HTTP.
 - Added `MinMaxLTTB` downsampling for long series with short peaks.

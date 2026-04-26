@@ -40,7 +40,27 @@ function loadFromSource(src, names, prefix = '') {
   return new Function('TextDecoder', 'TextEncoder', code)(TextDecoder, TextEncoder);
 }
 function loadAppCore(names, prefix = '') {
-  return loadFromSource(appSource, names, prefix);
+  const columnarDeps = [
+    '_isArrayIndex',
+    '_newCodeArray',
+    '_cloneFloatArray',
+    '_cloneBoolArray',
+    '_codeColumnGet',
+    '_codeColumnSet',
+    '_codeColumnDelete',
+    '_floatColumnGet',
+    '_floatColumnSet',
+    '_floatColumnDelete',
+    'createColumnarPoint',
+    'createColumnarData',
+    'isColumnarData',
+    'columnarDataFromPoints',
+    'columnarDataFromSeries',
+    'ensureColumnarParam'
+  ];
+  const needsColumnar = names.some(name => ['inflateWorkerParams', 'mergeParsedParams'].includes(name));
+  const expanded = needsColumnar ? [...columnarDeps, ...names] : names;
+  return loadFromSource(appSource, Array.from(new Set(expanded)), prefix);
 }
 function loadParserCore(names, prefix = '') {
   const code = [
@@ -147,7 +167,7 @@ test('external parser worker parses sample log', async () => {
   };
   vm.createContext(ctx);
   vm.runInContext(parserWorkerSource, ctx);
-  const app = loadAppCore(['inflateWorkerParams']);
+  const app = loadAppCore(['inflateWorkerParams', 'isColumnarData']);
   const sample = readFileSync(new URL('../data_base/test_base.txt', import.meta.url));
   ctx.self.onmessage({ data: { buffer: sample.buffer.slice(sample.byteOffset, sample.byteOffset + sample.byteLength), keepText: true } });
   await new Promise((resolve, reject) => {
@@ -164,6 +184,8 @@ test('external parser worker parses sample log', async () => {
   assert.ok(postedTransfer.length >= posted.paramsColumnar.length * 2);
   let params = app.inflateWorkerParams(posted);
   assert.ok(params.length > 0);
+  assert.equal(Array.isArray(params[0].data), false);
+  assert.equal(app.isColumnarData(params[0].data), true);
   assert.ok(params[0].data.length > 0);
   assert.ok(params.some(p => p.data.some(d => d.epochRaw === '1774155600000000' && d.epochUs === 1774155600000000)));
   assert.ok(posted.text.length > 0);
@@ -204,7 +226,7 @@ test('external parser worker parses sample log', async () => {
 });
 
 test('worker columnar params inflate status, epoch, and time source', () => {
-  const app = loadAppCore(['inflateWorkerParams']);
+  const app = loadAppCore(['inflateWorkerParams', 'isColumnarData']);
   const params = app.inflateWorkerParams({
     paramsColumnar: [{
       meta: {tag: 'TAG [bar]', unit: 'bar', length: 2, timezone: 'epoch', timeSource: 'epoch'},
@@ -215,9 +237,12 @@ test('worker columnar params inflate status, epoch, and time source', () => {
       epochUs: new Float64Array([1000000, NaN]),
       epochRaw: new BigInt64Array([1000000n, 0n]),
       epochRawMask: new Uint8Array([1, 0]),
-      timeSourceCodes: new Uint8Array([0, 2])
+      timeSourceValues: ['epoch', 'local'],
+      timeSourceCodes: new Int32Array([0, 1])
     }]
   });
+  assert.equal(Array.isArray(params[0].data), false);
+  assert.equal(app.isColumnarData(params[0].data), true);
   assert.equal(params[0].tag, 'TAG [bar]');
   assert.equal(params[0].data[0].status, 'GOOD');
   assert.equal(params[0].data[0].epochRaw, '1000000');
@@ -287,6 +312,7 @@ test('parser handles sample wide log and strips hidden bidi controls', () => {
   assert.ok(parsed.p.some(p => p.unit === '°C'));
   assert.ok(parsed.p.every(p => !/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/.test(p.tag)));
   assert.ok(parsed.p.every(p => p.data.length > 0));
+  assert.equal(Array.isArray(parsed.p[0].data), false);
   assert.ok(parsed.p.some(p => p.data.some(d => d.epochUs != null)));
 });
 

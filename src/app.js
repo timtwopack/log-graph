@@ -296,6 +296,230 @@ function isBadQuality(status){
   if(s === '1' || s.indexOf('bad') !== -1 || s.indexOf('invalid') !== -1 || s.indexOf('fault') !== -1 || s.indexOf('substitut') !== -1 || s.indexOf('подмен') !== -1 || s.indexOf('ошиб') !== -1 || s.indexOf('авар') !== -1) return true;
   return true;
 }
+function _isArrayIndex(prop){
+  if(typeof prop === 'symbol') return false;
+  const s = String(prop);
+  if(!/^(0|[1-9]\d*)$/.test(s)) return false;
+  const n = Number(s);
+  return Number.isSafeInteger(n) && n >= 0;
+}
+function _newCodeArray(len){
+  const out = new Int32Array(len);
+  out.fill(-1);
+  return out;
+}
+function _cloneFloatArray(values, len, emptyValue){
+  const out = new Float64Array(len);
+  if(emptyValue !== undefined) out.fill(emptyValue);
+  if(values){
+    const n = Math.min(len, values.length);
+    for(let i = 0; i < n; i++){
+      const v = Number(values[i]);
+      out[i] = Number.isFinite(v) ? v : (emptyValue !== undefined ? emptyValue : NaN);
+    }
+  }
+  return out;
+}
+function _cloneBoolArray(values, len){
+  const out = new Uint8Array(len);
+  if(values){
+    const n = Math.min(len, values.length);
+    for(let i = 0; i < n; i++) out[i] = values[i] ? 1 : 0;
+  }
+  return out;
+}
+function _codeColumnGet(cols, name, index){
+  const codes = cols[name + 'Codes'];
+  const values = cols[name + 'Values'];
+  if(!codes || !values) return undefined;
+  const code = codes[index];
+  return code >= 0 ? values[code] : undefined;
+}
+function _codeColumnSet(cols, name, index, value){
+  if(value == null || value === ''){
+    _codeColumnDelete(cols, name, index);
+    return;
+  }
+  if(!cols[name + 'Codes']) cols[name + 'Codes'] = _newCodeArray(cols.length);
+  if(!cols[name + 'Values']) cols[name + 'Values'] = [];
+  const values = cols[name + 'Values'];
+  const s = String(value);
+  let code = values.indexOf(s);
+  if(code < 0){ code = values.length; values.push(s); }
+  cols[name + 'Codes'][index] = code;
+}
+function _codeColumnDelete(cols, name, index){
+  if(cols[name + 'Codes']) cols[name + 'Codes'][index] = -1;
+}
+function _floatColumnGet(cols, name, index){
+  const arr = cols[name];
+  if(!arr) return undefined;
+  const value = arr[index];
+  return Number.isFinite(value) ? value : undefined;
+}
+function _floatColumnSet(cols, name, index, value){
+  if(value == null || value === '' || !Number.isFinite(Number(value))){
+    _floatColumnDelete(cols, name, index);
+    return;
+  }
+  if(!cols[name]){
+    cols[name] = new Float64Array(cols.length);
+    cols[name].fill(NaN);
+  }
+  cols[name][index] = Number(value);
+}
+function _floatColumnDelete(cols, name, index){
+  if(cols[name]) cols[name][index] = NaN;
+}
+function createColumnarPoint(data, index){
+  const cols = data._cols;
+  const handler = {
+    get(_target, prop){
+      if(prop === 'ts') return cols.ts[index];
+      if(prop === 'val') return cols.val[index];
+      if(prop === 'status') return _codeColumnGet(cols, 'status', index);
+      if(prop === 'epochUs') return _floatColumnGet(cols, 'epochUs', index);
+      if(prop === 'epochRaw') return _codeColumnGet(cols, 'epochRaw', index);
+      if(prop === 'timeSource') return _codeColumnGet(cols, 'timeSource', index);
+      if(prop === 'sourceFile') return _codeColumnGet(cols, 'sourceFile', index);
+      if(prop === 'rawVal') return _floatColumnGet(cols, 'rawVal', index);
+      if(prop === 'mergeConflict') return !!(cols.mergeConflict && cols.mergeConflict[index]);
+      return undefined;
+    },
+    set(_target, prop, value){
+      if(prop === 'ts'){ cols.ts[index] = Number(value); return true; }
+      if(prop === 'val'){ cols.val[index] = Number(value); return true; }
+      if(prop === 'status'){ _codeColumnSet(cols, 'status', index, value); return true; }
+      if(prop === 'epochUs'){ _floatColumnSet(cols, 'epochUs', index, value); return true; }
+      if(prop === 'epochRaw'){ _codeColumnSet(cols, 'epochRaw', index, value); return true; }
+      if(prop === 'timeSource'){ _codeColumnSet(cols, 'timeSource', index, value); return true; }
+      if(prop === 'sourceFile'){ _codeColumnSet(cols, 'sourceFile', index, value); return true; }
+      if(prop === 'rawVal'){ _floatColumnSet(cols, 'rawVal', index, value); return true; }
+      if(prop === 'mergeConflict'){
+        if(!cols.mergeConflict) cols.mergeConflict = new Uint8Array(cols.length);
+        cols.mergeConflict[index] = value ? 1 : 0;
+        return true;
+      }
+      return true;
+    },
+    deleteProperty(_target, prop){
+      if(prop === 'status'){ _codeColumnDelete(cols, 'status', index); return true; }
+      if(prop === 'epochUs'){ _floatColumnDelete(cols, 'epochUs', index); return true; }
+      if(prop === 'epochRaw'){ _codeColumnDelete(cols, 'epochRaw', index); return true; }
+      if(prop === 'timeSource'){ _codeColumnDelete(cols, 'timeSource', index); return true; }
+      if(prop === 'sourceFile'){ _codeColumnDelete(cols, 'sourceFile', index); return true; }
+      if(prop === 'rawVal'){ _floatColumnDelete(cols, 'rawVal', index); return true; }
+      if(prop === 'mergeConflict'){ if(cols.mergeConflict) cols.mergeConflict[index] = 0; return true; }
+      return true;
+    },
+    ownKeys(){
+      const keys = ['ts', 'val'];
+      for(const name of ['status', 'epochUs', 'epochRaw', 'timeSource', 'sourceFile', 'rawVal', 'mergeConflict']){
+        const value = handler.get(null, name);
+        if(value !== undefined && value !== false) keys.push(name);
+      }
+      return keys;
+    },
+    getOwnPropertyDescriptor(_target, prop){
+      if(handler.ownKeys().includes(String(prop))) return {enumerable: true, configurable: true};
+      return undefined;
+    }
+  };
+  return new Proxy({}, handler);
+}
+function createColumnarData(input){
+  const len = input && input.ts ? input.ts.length : 0;
+  const cols = {
+    length: len,
+    ts: input && input.ts instanceof Float64Array ? input.ts : _cloneFloatArray(input && input.ts, len),
+    val: input && input.val instanceof Float64Array ? input.val : _cloneFloatArray(input && input.val, len)
+  };
+  for(const name of ['status', 'epochRaw', 'timeSource', 'sourceFile']){
+    const codes = input && input[name + 'Codes'];
+    const values = input && input[name + 'Values'];
+    if(codes && values){
+      cols[name + 'Codes'] = codes instanceof Int32Array ? codes : Int32Array.from(codes);
+      cols[name + 'Values'] = Array.from(values);
+    }
+  }
+  if(input && input.epochUs) cols.epochUs = input.epochUs instanceof Float64Array ? input.epochUs : _cloneFloatArray(input.epochUs, len, NaN);
+  if(input && input.rawVal) cols.rawVal = input.rawVal instanceof Float64Array ? input.rawVal : _cloneFloatArray(input.rawVal, len, NaN);
+  if(input && input.mergeConflict) cols.mergeConflict = input.mergeConflict instanceof Uint8Array ? input.mergeConflict : _cloneBoolArray(input.mergeConflict, len);
+  const api = {
+    _columnar: true,
+    _cols: cols,
+    get length(){ return cols.length; },
+    at(index){ return this[index < 0 ? cols.length + index : index]; },
+    getPoint(index){ return index >= 0 && index < cols.length ? createColumnarPoint(api, index) : undefined; },
+    setPoint(index, point){
+      if(index < 0 || index >= cols.length || !point) return;
+      cols.ts[index] = Number(point.ts);
+      cols.val[index] = Number(point.val);
+      for(const name of ['status', 'epochRaw', 'timeSource', 'sourceFile']){
+        if(point[name] !== undefined) _codeColumnSet(cols, name, index, point[name]);
+      }
+      if(point.epochUs !== undefined) _floatColumnSet(cols, 'epochUs', index, point.epochUs);
+      if(point.rawVal !== undefined) _floatColumnSet(cols, 'rawVal', index, point.rawVal);
+      if(point.mergeConflict !== undefined){
+        if(!cols.mergeConflict) cols.mergeConflict = new Uint8Array(cols.length);
+        cols.mergeConflict[index] = point.mergeConflict ? 1 : 0;
+      }
+    },
+    toArray(){ return Array.from(this); },
+    map(fn, thisArg){ const out = new Array(cols.length); for(let i = 0; i < cols.length; i++) out[i] = fn.call(thisArg, this[i], i, this); return out; },
+    filter(fn, thisArg){ const out = []; for(let i = 0; i < cols.length; i++){ const p = this[i]; if(fn.call(thisArg, p, i, this)) out.push(p); } return out; },
+    some(fn, thisArg){ for(let i = 0; i < cols.length; i++){ if(fn.call(thisArg, this[i], i, this)) return true; } return false; },
+    every(fn, thisArg){ for(let i = 0; i < cols.length; i++){ if(!fn.call(thisArg, this[i], i, this)) return false; } return true; },
+    forEach(fn, thisArg){ for(let i = 0; i < cols.length; i++) fn.call(thisArg, this[i], i, this); },
+    reduce(fn, initial){ let i = 0; let acc = initial; if(arguments.length < 2){ if(!cols.length) throw new TypeError('Reduce of empty columnar data'); acc = this[0]; i = 1; } for(; i < cols.length; i++) acc = fn(acc, this[i], i, this); return acc; },
+    slice(start, end){ return this.toArray().slice(start, end); },
+    concat(){ return this.toArray().concat(...Array.from(arguments).map(arg => isColumnarData(arg) ? arg.toArray() : arg)); },
+    [Symbol.iterator]: function*(){ for(let i = 0; i < cols.length; i++) yield this[i]; }
+  };
+  return new Proxy(api, {
+    get(target, prop, receiver){
+      if(_isArrayIndex(prop)) return target.getPoint(Number(prop));
+      return Reflect.get(target, prop, receiver);
+    },
+    set(target, prop, value){
+      if(_isArrayIndex(prop)){ target.setPoint(Number(prop), value); return true; }
+      return Reflect.set(target, prop, value);
+    }
+  });
+}
+function isColumnarData(data){
+  return !!(data && data._columnar === true && data._cols);
+}
+function columnarDataFromPoints(points){
+  const arr = Array.from(points || []);
+  const data = createColumnarData({
+    ts: new Float64Array(arr.length),
+    val: new Float64Array(arr.length)
+  });
+  for(let i = 0; i < arr.length; i++) data.setPoint(i, arr[i]);
+  return data;
+}
+function columnarDataFromSeries(x, y, extras){
+  const len = Math.min((x && x.length) || 0, (y && y.length) || 0);
+  const data = createColumnarData({
+    ts: _cloneFloatArray(x, len),
+    val: _cloneFloatArray(y, len)
+  });
+  extras = extras || {};
+  for(let i = 0; i < len; i++){
+    if(extras.status && extras.status[i]) data[i].status = extras.status[i];
+    if(extras.epochUs && extras.epochUs[i] != null) data[i].epochUs = extras.epochUs[i];
+    if(extras.rawVal && extras.rawVal[i] != null) data[i].rawVal = extras.rawVal[i];
+    if(extras.timeSource && extras.timeSource[i]) data[i].timeSource = extras.timeSource[i];
+    if(extras.mergeConflict && extras.mergeConflict[i]) data[i].mergeConflict = true;
+    if(extras.sourceFile && extras.sourceFile[i]) data[i].sourceFile = extras.sourceFile[i];
+  }
+  return data;
+}
+function ensureColumnarParam(param){
+  if(param && Array.isArray(param.data)) param.data = columnarDataFromPoints(param.data);
+  return param;
+}
 function hasBadQuality(data){
   return data.some(d => isBadQuality(d.status));
 }
@@ -1251,6 +1475,8 @@ function ensureParamColor(p){
   if(p && p.tag && !S.style.PC[p.tag]) S.style.PC[p.tag] = PAL[Object.keys(S.style.PC).length % PAL.length];
 }
 function mergeParsedParams(params, ex){
+  params.forEach(ensureColumnarParam);
+  if(ex) ex.forEach(ensureColumnarParam);
   params.forEach(ensureParamColor);
   if(!ex || !ex.length) return {p: params, e: null, conflicts: 0};
 
@@ -1263,14 +1489,16 @@ function mergeParsedParams(params, ex){
     if(em[pr2.tag]){
       const ep = em[pr2.tag];
       used[pr2.tag] = true;
-      const c2 = ep.data.concat(pr2.data);
+      const c2 = ep.data.map(point => ({point, sourceFile: ep.sourceFile})).concat(pr2.data.map(point => ({point, sourceFile: pr2.sourceFile})));
       const seen = new Set();
       const d2 = [];
-      for(const item of c2){
+      for(const wrapped of c2){
+        const item = wrapped.point;
         const key = item.ts + '_' + item.val + '_' + (item.status || '');
         if(seen.has(key)) continue;
         seen.add(key);
         const copy = Object.assign({}, item);
+        if(!copy.sourceFile && wrapped.sourceFile) copy.sourceFile = wrapped.sourceFile;
         delete copy.mergeConflict;
         d2.push(copy);
       }
@@ -1295,7 +1523,7 @@ function mergeParsedParams(params, ex){
         sourceFile: files.join(', '),
         dc: ep.dc, tc: ep.tc, mc: ep.mc, sc: ep.sc, ec: ep.ec,
         vc: ep.vc,
-        data: d2,
+        data: columnarDataFromPoints(d2),
         merged: true,
         timezone: ep.timezone || pr2.timezone || 'local',
         timeSource: ep.timeSource || pr2.timeSource || ep.timezone || pr2.timezone || 'local',
@@ -1311,32 +1539,28 @@ function mergeParsedParams(params, ex){
   return {p: mg, e: null, conflicts: mg.reduce((sum, p) => sum + (p.mergeConflicts || 0), 0)};
 }
 function inflateWorkerParams(data){
-  if(Array.isArray(data && data.params)) return data.params;
+  if(Array.isArray(data && data.params)) return data.params.map(ensureColumnarParam);
   const packed = data && Array.isArray(data.paramsColumnar) ? data.paramsColumnar : [];
   return packed.map(item => {
     const meta = Object.assign({}, item.meta || {});
-    const len = Number(meta.length || (item.ts ? item.ts.length : 0)) || 0;
     delete meta.length;
-    const ts = item.ts || [];
-    const val = item.val || [];
-    const statusCodes = item.statusCodes || null;
-    const statusValues = Array.isArray(item.statusValues) ? item.statusValues : [];
-    const epochUs = item.epochUs || null;
-    const epochRaw = item.epochRaw || null;
-    const epochRawMask = item.epochRawMask || null;
-    const timeSourceCodes = item.timeSourceCodes || null;
-    const defaultTimeSource = meta.timeSource || meta.timezone || 'local';
-    const points = new Array(len);
-    for(let i = 0; i < len; i++){
-      const point = {ts: ts[i], val: val[i]};
-      if(statusCodes && statusCodes[i] >= 0) point.status = statusValues[statusCodes[i]] || '';
-      if(epochUs && Number.isFinite(epochUs[i])) point.epochUs = epochUs[i];
-      if(epochRaw && epochRawMask && epochRawMask[i]) point.epochRaw = String(epochRaw[i]);
-      if(timeSourceCodes && timeSourceCodes[i]) point.timeSource = timeSourceCodes[i] === 1 ? 'epoch' : 'local';
-      else if(defaultTimeSource && defaultTimeSource !== 'local') point.timeSource = defaultTimeSource;
-      points[i] = point;
+    const parsedData = createColumnarData({
+      ts: item.ts || new Float64Array(0),
+      val: item.val || new Float64Array(0),
+      statusCodes: item.statusCodes || null,
+      statusValues: item.statusValues || [],
+      timeSourceCodes: item.timeSourceCodes || null,
+      timeSourceValues: item.timeSourceValues || [],
+      sourceFileCodes: item.sourceFileCodes || null,
+      sourceFileValues: item.sourceFileValues || [],
+      epochUs: item.epochUs || null
+    });
+    if(item.epochRaw && item.epochRawMask){
+      for(let i = 0; i < parsedData.length; i++){
+        if(item.epochRawMask[i]) parsedData[i].epochRaw = String(item.epochRaw[i]);
+      }
     }
-    meta.data = points;
+    meta.data = parsedData;
     return meta;
   });
 }
@@ -1440,7 +1664,7 @@ async function precomputeTraceCacheForParams(params){
       color: gc(p),
       lw: S.style.PW[p.tag] || S.view.LW,
       ld: S.style.PD[p.tag] || S.view.LDASH,
-      data: p.data
+      data: isColumnarData(p.data) ? p.data.toArray() : p.data
     },
     view: {
       tr: S.view.TR ? S.view.TR.slice() : null,
@@ -1508,7 +1732,6 @@ async function hf(fileList){
       }
       for(const p of item.params){
         p.sourceFile = item.file.name;
-        for(const d of p.data){ if(!d.sourceFile) d.sourceFile = item.file.name; }
       }
       const res = mergeParsedParams(item.params, nextAP);
       if(res.e){
@@ -4443,7 +4666,7 @@ function validateSessionPayload(payload){
         if(hasTimeSource) out.tsrc.push(cleanImportString(p.tsrc[i] || '', 32));
         if(hasMergeConflict) out.mc.push(!!p.mc[i]);
       }
-    } else if(Array.isArray(p.data)){
+    } else if(Array.isArray(p.data) || isColumnarData(p.data)){
       const data = [];
       totalPoints += p.data.length;
       if(totalPoints > MAX_SESSION_POINTS) throw new Error('слишком много точек в сессии');
@@ -4572,19 +4795,18 @@ async function loadSession(name){
     const out = Object.assign({}, p);
     if(Array.isArray(p.x) && Array.isArray(p.y)){
       const len = Math.min(p.x.length, p.y.length);
-      const data = new Array(len);
-      for(let i = 0; i < len; i++){
-        const status = Array.isArray(p.st) ? String(p.st[i] || '') : '';
-        data[i] = status ? {ts: p.x[i], val: p.y[i], status} : {ts: p.x[i], val: p.y[i]};
-        if(Array.isArray(p.ep) && p.ep[i] != null) data[i].epochUs = p.ep[i];
-        if(Array.isArray(p.rv) && p.rv[i] != null) data[i].rawVal = p.rv[i];
-        if(Array.isArray(p.tsrc) && p.tsrc[i]) data[i].timeSource = String(p.tsrc[i]);
-        if(Array.isArray(p.mc) && p.mc[i]) data[i].mergeConflict = true;
-      }
-      out.data = data;
+      out.data = columnarDataFromSeries(p.x.slice(0, len), p.y.slice(0, len), {
+        status: Array.isArray(p.st) ? p.st : null,
+        epochUs: Array.isArray(p.ep) ? p.ep : null,
+        rawVal: Array.isArray(p.rv) ? p.rv : null,
+        timeSource: Array.isArray(p.tsrc) ? p.tsrc : null,
+        mergeConflict: Array.isArray(p.mc) ? p.mc : null
+      });
       delete out.x; delete out.y; delete out.st; delete out.ep; delete out.rv; delete out.tsrc; delete out.mc;
-    } else if(!Array.isArray(p.data)){
-      out.data = [];
+    } else if(Array.isArray(p.data)){
+      out.data = columnarDataFromPoints(p.data);
+    } else if(!isColumnarData(p.data)){
+      out.data = columnarDataFromPoints([]);
     }
     out.signalKind = ['analog', 'binary', 'step', 'setpoint'].includes(out.signalKind) ? out.signalKind : (out.isDiscrete ? 'binary' : 'analog');
     out.isDiscrete = out.signalKind !== 'analog';

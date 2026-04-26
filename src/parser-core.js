@@ -120,6 +120,99 @@ function headerIndexFromText(text){
   const first = stripBom(text).replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')[0] || '';
   return first.startsWith('%PAHEADER%') ? 1 : 0;
 }
+function createParserDataStore(){
+  const store = {
+    _columnar: true,
+    _len: 0,
+    _cap: 1024,
+    _ts: new Float64Array(1024),
+    _val: new Float64Array(1024),
+    _status: [],
+    _epochUs: new Float64Array(1024),
+    _epochRaw: [],
+    _timeSource: [],
+    get length(){ return this._len; },
+    _ensureCapacity(nextLen){
+      if(nextLen <= this._cap) return;
+      let nextCap = this._cap;
+      while(nextCap < nextLen) nextCap *= 2;
+      const nextTs = new Float64Array(nextCap);
+      const nextVal = new Float64Array(nextCap);
+      const nextEpochUs = new Float64Array(nextCap);
+      nextEpochUs.fill(NaN);
+      nextTs.set(this._ts.subarray(0, this._len));
+      nextVal.set(this._val.subarray(0, this._len));
+      nextEpochUs.set(this._epochUs.subarray(0, this._len));
+      this._cap = nextCap;
+      this._ts = nextTs;
+      this._val = nextVal;
+      this._epochUs = nextEpochUs;
+    },
+    push(point){
+      const i = this._len;
+      this._ensureCapacity(i + 1);
+      this._len++;
+      this._ts[i] = point.ts;
+      this._val[i] = point.val;
+      this._status[i] = point.status || '';
+      this._epochUs[i] = point.epochUs != null ? point.epochUs : NaN;
+      this._epochRaw[i] = point.epochRaw || '';
+      this._timeSource[i] = point.timeSource || '';
+    },
+    at(index){ return this[index < 0 ? this.length + index : index]; },
+    point(index){
+      if(index < 0 || index >= this.length) return undefined;
+      const out = {ts: this._ts[index], val: this._val[index]};
+      if(this._status[index]) out.status = this._status[index];
+      if(Number.isFinite(this._epochUs[index])) out.epochUs = this._epochUs[index];
+      if(this._epochRaw[index]) out.epochRaw = this._epochRaw[index];
+      if(this._timeSource[index]) out.timeSource = this._timeSource[index];
+      return out;
+    },
+    map(fn, thisArg){ const out = new Array(this.length); for(let i = 0; i < this.length; i++) out[i] = fn.call(thisArg, this[i], i, this); return out; },
+    filter(fn, thisArg){ const out = []; for(let i = 0; i < this.length; i++){ const p = this[i]; if(fn.call(thisArg, p, i, this)) out.push(p); } return out; },
+    some(fn, thisArg){ for(let i = 0; i < this.length; i++){ if(fn.call(thisArg, this[i], i, this)) return true; } return false; },
+    forEach(fn, thisArg){ for(let i = 0; i < this.length; i++) fn.call(thisArg, this[i], i, this); },
+    toArray(){ return Array.from(this); },
+    [Symbol.iterator]: function*(){ for(let i = 0; i < this.length; i++) yield this[i]; }
+  };
+  store._epochUs.fill(NaN);
+  return new Proxy(store, {
+    get(target, prop, receiver){
+      if(/^(0|[1-9]\d*)$/.test(String(prop || ''))) return target.point(Number(prop));
+      return Reflect.get(target, prop, receiver);
+    }
+  });
+}
+function sortParserDataStore(data){
+  if(!data || data.length < 2) return data;
+  const order = Array.from({length: data.length}, (_, i) => i).sort((a, b) => data._ts[a] - data._ts[b]);
+  const len = data.length;
+  const ts = new Float64Array(Math.max(1024, len));
+  const val = new Float64Array(Math.max(1024, len));
+  const epochUs = new Float64Array(Math.max(1024, len));
+  epochUs.fill(NaN);
+  const status = new Array(len);
+  const epochRaw = new Array(len);
+  const timeSource = new Array(len);
+  for(let outIdx = 0; outIdx < len; outIdx++){
+    const srcIdx = order[outIdx];
+    ts[outIdx] = data._ts[srcIdx];
+    val[outIdx] = data._val[srcIdx];
+    epochUs[outIdx] = data._epochUs[srcIdx];
+    status[outIdx] = data._status[srcIdx];
+    epochRaw[outIdx] = data._epochRaw[srcIdx];
+    timeSource[outIdx] = data._timeSource[srcIdx];
+  }
+  data._cap = ts.length;
+  data._ts = ts;
+  data._val = val;
+  data._epochUs = epochUs;
+  data._status = status;
+  data._epochRaw = epochRaw;
+  data._timeSource = timeSource;
+  return data;
+}
 function createParseState(){
   return {
     nonEmptyLines: 0,
@@ -163,7 +256,7 @@ function initParamsFromHeader(state, headerLine){
       if(/^(?:Время|Time)(?:\s|$)/i.test(nextH) && nextH.indexOf(tag) !== -1){
         const unitM = tag.match(/\[([^\]]+)\]\s*$/);
         const unit = unitM ? cleanCell(unitM[1]) : '';
-        params.push({tag, originalTag: tag, shortName: shortNameFromTag(tag), unit, sourceFile: '', dc: col, tc: col + 1, mc: col + 2, sc: col + 3, ec: -1, vc: col + 4, data: [], cn: '', merged: false, timezone: 'local', timeSource: 'local', _sorted: true, _lastTs: null});
+        params.push({tag, originalTag: tag, shortName: shortNameFromTag(tag), unit, sourceFile: '', dc: col, tc: col + 1, mc: col + 2, sc: col + 3, ec: -1, vc: col + 4, data: createParserDataStore(), cn: '', merged: false, timezone: 'local', timeSource: 'local', _sorted: true, _lastTs: null});
         col += 5;
         continue;
       }
@@ -198,7 +291,7 @@ function initParamsFromHeader(state, headerLine){
     if(!raw) continue;
     const unitM = raw.match(/\[([^\]]+)\]\s*$/);
     const unit = unitM ? cleanCell(unitM[1]) : '';
-    params.push({tag: raw, originalTag: raw, shortName: shortNameFromTag(raw), unit, sourceFile: '', dc: 0, tc: 1, mc: 2, sc: -1, ec: epochCol, vc, data: [], cn: '', merged: false, _wide: true, timezone: epochCol >= 0 ? 'epoch' : 'local', timeSource: epochCol >= 0 ? 'epoch' : 'local', _sorted: true, _lastTs: null});
+    params.push({tag: raw, originalTag: raw, shortName: shortNameFromTag(raw), unit, sourceFile: '', dc: 0, tc: 1, mc: 2, sc: -1, ec: epochCol, vc, data: createParserDataStore(), cn: '', merged: false, _wide: true, timezone: epochCol >= 0 ? 'epoch' : 'local', timeSource: epochCol >= 0 ? 'epoch' : 'local', _sorted: true, _lastTs: null});
   }
   if(!params.length){
     state.error = 'Не найдены колонки параметров';
@@ -292,7 +385,7 @@ function finishParseState(state){
     for(const row of rows) parseDataColumnsIntoParams(state, row);
   }
   for(const param of state.params){
-    if(!param._sorted) param.data.sort((a, b) => a.ts - b.ts);
+    if(!param._sorted) sortParserDataStore(param.data);
     delete param._sorted;
     delete param._lastTs;
   }

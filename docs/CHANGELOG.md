@@ -10,6 +10,8 @@
 - Added a streaming large-file import path through `File.stream()` and incremental `TextDecoder` inside `parser.worker.js`; the main thread no longer has to read the full file into an `arrayBuffer()`.
 - Raised the input-file guardrail to 8 GiB; full source text is retained only up to 25 MiB, so save-with-renamed-tags is disabled for large logs.
 - Parser results are transferred from `parser.worker.js` as columnar typed arrays through a transfer-list; the main thread inflates them into the current UI data structure.
+- Main-state now uses `ColumnarData`: `S.data.AP[].data` is no longer a point-object array, while keeping an array-like API for existing UI code.
+- The internal `parser-core.js` buffer no longer accumulates `{ts,val}` objects and writes points into a columnar store instead.
 - Optional `trace.worker.js` precompute now skips large datasets to avoid structured-cloning hundreds of thousands of point objects immediately after import.
 - Expanded encoding sniffing to 64 KiB so short binary/ASCII prefixes do not dominate UTF-8/CP1251/UTF-16 detection.
 - Preserved grouped-format `status` values per point.
