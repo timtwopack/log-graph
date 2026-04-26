@@ -107,7 +107,9 @@ const S = {
     TRACE_WORKER: null,
     TRACE_WORKER_SEQ: 1,
     TRACE_WORKER_PENDING: {},
-    TRACE_DATA_SEQ: 1
+    TRACE_DATA_SEQ: 1,
+    WEBGL_SUPPORTED: null,
+    WEBGL_FAILURE_MESSAGE: ''
   }
 };
 
@@ -166,7 +168,10 @@ const UNIT_CONVERSIONS = {
 
 const PAL = ["#22d3ee","#f472b6","#a78bfa","#34d399","#fb923c","#facc15","#f87171","#60a5fa","#c084fc","#4ade80","#e879f9","#38bdf8","#fbbf24","#818cf8","#2dd4bf","#fb7185","#a3e635","#f97316","#67e8f9","#d946ef"];
 const MAX_PTS = 5000;
-const WEBGL_THRESHOLD = 2000; /* use WebGL for traces above this many points — much faster zoom/pan */
+/* Normal time-series traces are already downsampled to MAX_PTS, so SVG scatter is
+   the safer default on plant laptops where WebGL can be disabled by driver/policy.
+   WebGL is reserved for genuinely larger traces, mainly XY mode. */
+const WEBGL_THRESHOLD = 20000;
 const MAX_INPUT_FILE_BYTES = 8 * 1024 * 1024 * 1024;
 const MAX_STORED_TEXT_BYTES = 25 * 1024 * 1024;
 const TRACE_WORKER_MAX_TRANSFER_BYTES = 256 * 1024 * 1024;
@@ -828,6 +833,32 @@ function recordPerf(name, startMs, extra){
   if(S.runtime.PERF.length > 200) S.runtime.PERF.shift();
   return item;
 }
+function plotlyWebGlAvailable(){
+  if(S.runtime.WEBGL_SUPPORTED === false) return false;
+  if(S.runtime.WEBGL_SUPPORTED === true) return true;
+  try{
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    S.runtime.WEBGL_SUPPORTED = !!gl;
+  }catch(e){
+    S.runtime.WEBGL_SUPPORTED = false;
+    S.runtime.WEBGL_FAILURE_MESSAGE = e && e.message ? e.message : String(e || '');
+  }
+  return S.runtime.WEBGL_SUPPORTED === true;
+}
+function traceTypeForPointCount(pointCount){
+  return pointCount > WEBGL_THRESHOLD && plotlyWebGlAvailable() ? 'scattergl' : 'scatter';
+}
+function isPlotlyWebGlError(error){
+  const msg = error && error.message ? error.message : String(error || '');
+  return /webgl|regl/i.test(msg);
+}
+function disableWebGlForSession(error){
+  S.runtime.WEBGL_SUPPORTED = false;
+  S.runtime.WEBGL_FAILURE_MESSAGE = error && error.message ? error.message : String(error || '');
+  clearTraceCache();
+  showErr('WebGL недоступен, переключаю графики на обычный SVG-режим');
+}
 function exportDiagnostics(){
   const payload = {
     exportedAt: new Date().toISOString(),
@@ -841,6 +872,10 @@ function exportDiagnostics(){
     traceWorker: {
       active: !!S.runtime.TRACE_WORKER,
       pending: Object.keys(S.runtime.TRACE_WORKER_PENDING || {}).length
+    },
+    webgl: {
+      supported: S.runtime.WEBGL_SUPPORTED,
+      failureMessage: S.runtime.WEBGL_FAILURE_MESSAGE || ''
     },
     files: S.data.FN.slice(),
     params: S.data.AP.map(p => ({
@@ -2318,7 +2353,7 @@ function buildXYSpec(params, pd, h){
     totalPts += d.pointCount;
     traces.push({
       x: d.x, y: d.y, name: d.name,
-      type: d.pointCount > WEBGL_THRESHOLD ? 'scattergl' : 'scatter',
+      type: traceTypeForPointCount(d.pointCount),
       mode: 'lines+markers',
       line:{color:d.color, width:d.lw, dash:d.ld, shape:'linear'},
       marker:{size:3, color:d.color},
@@ -5529,6 +5564,7 @@ function prepareTraceData(p){
     hit.color = gc(p);
     hit.lw = S.style.PW[p.tag] || S.view.LW;
     hit.ld = S.style.PD[p.tag] || S.view.LDASH;
+    hit.traceType = traceTypeForPointCount(hit.dispLen);
     return hit;
   }
   const result = _prepareTraceDataImpl(p);
@@ -5650,7 +5686,7 @@ function _prepareTraceDataImpl(p){
     ld: S.style.PD[p.tag] || S.view.LDASH,
     lineShape,
     splineSmoothing,
-    traceType: ds.x.length > WEBGL_THRESHOLD ? 'scattergl' : 'scatter'
+    traceType: traceTypeForPointCount(ds.x.length)
   };
 }
 
@@ -5959,6 +5995,11 @@ function _renderChart(cache, isNew){
         refreshCursors();
       }
     }catch(e){
+      if(isPlotlyWebGlError(e) && S.runtime.WEBGL_SUPPORTED !== false){
+        disableWebGlForSession(e);
+        _renderChart(cache, isNew);
+        return;
+      }
       createPlotError(cache.pd, e);
       console.error(e);
     }

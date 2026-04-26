@@ -350,6 +350,23 @@ test('trace worker payload reuses shared columnar buffers without transfer', () 
   assert.equal(transfer.length, 0);
 });
 
+test('plot trace type avoids WebGL for normal downsampled series and falls back without WebGL', () => {
+  const noWebgl = loadAppCore(
+    ['plotlyWebGlAvailable', 'traceTypeForPointCount', 'isPlotlyWebGlError'],
+    "const WEBGL_THRESHOLD = 20000;\nconst S = {runtime:{WEBGL_SUPPORTED:null, WEBGL_FAILURE_MESSAGE:''}};\nconst document = {createElement: () => ({getContext: () => null})};"
+  );
+  assert.equal(noWebgl.traceTypeForPointCount(5000), 'scatter');
+  assert.equal(noWebgl.traceTypeForPointCount(50000), 'scatter');
+  assert.equal(noWebgl.isPlotlyWebGlError(new Error('WebGL is not supported by your browser')), true);
+
+  const withWebgl = loadAppCore(
+    ['plotlyWebGlAvailable', 'traceTypeForPointCount'],
+    "const WEBGL_THRESHOLD = 20000;\nconst S = {runtime:{WEBGL_SUPPORTED:null, WEBGL_FAILURE_MESSAGE:''}};\nconst document = {createElement: () => ({getContext: () => ({})})};"
+  );
+  assert.equal(withWebgl.traceTypeForPointCount(5000), 'scatter');
+  assert.equal(withWebgl.traceTypeForPointCount(50000), 'scattergl');
+});
+
 test('worker columnar params inflate status, epoch, and time source', () => {
   const app = loadAppCore(['inflateWorkerParams', 'isColumnarData']);
   const params = app.inflateWorkerParams({
