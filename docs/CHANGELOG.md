@@ -7,8 +7,14 @@
 - Split parser core into `src/parser-core.js` with a thin worker wrapper.
 - Removed duplicate main-thread/blob parser fallbacks; static serving is now required for imports.
 - Added optional `trace.worker.js` precompute path for initial downsampling/cache warmup.
+- Added a streaming large-file import path through `File.stream()` and incremental `TextDecoder` inside `parser.worker.js`; the main thread no longer has to read the full file into an `arrayBuffer()`.
+- Raised the input-file guardrail to 8 GiB; full source text is retained only up to 25 MiB, so save-with-renamed-tags is disabled for large logs.
+- Expanded encoding sniffing to 64 KiB so short binary/ASCII prefixes do not dominate UTF-8/CP1251/UTF-16 detection.
 - Preserved grouped-format `status` values per point.
 - Preserved optional epoch timestamp as `epochUs` and use it as the timestamp source of truth; local date/time columns remain the fallback.
+- Documented that the `Date/Time/ms` fallback without epoch is interpreted as local browser time.
+- Wide-log epoch columns are now inferred from several initial rows instead of only the first data row.
+- Two-digit years now use the `00..69 => 2000..2069`, `70..99 => 1970..1999` window.
 - Bounded multi-file loading to one or two concurrent parse jobs to reduce large-log memory peaks.
 - Preserve and mark same-`tag + timestamp` conflicts with different values/status as merge conflicts.
 - Save-with-rename now edits only exact header cells instead of replacing every matching substring in the header line.
@@ -16,7 +22,10 @@
 - Added `make-review-bundle.ps1` / `npm run review:bundle` so reviews receive the source bundle without generated/stale HTML.
 - Added a regression test for UTF-16LE/UTF-16BE log decoding.
 - Added `signalKind` (`analog`, `binary`, `step`, `setpoint`) and per-parameter override in the sidebar.
-- Added quality filter for excluding non-good status points from charts, statistics, smoothing, and anomaly detection.
+- Added quality filter for excluding non-good status points from charts, statistics, smoothing, and anomaly detection; `GOOD`, `GoodProvider`, `GoodLocalOverride`, and numeric `0` are treated as good quality.
+- Added `MinMaxLTTB` downsampling: Min/Max extrema preselection before LTTB.
+- Removed regex-heavy control-character cleanup from the hot data-cell parser path while keeping stricter cleanup for imported names/headers.
+- Skip point sorting for series that are already ordered.
 - Replaced ambiguous raw CSV with `raw-long` export that contains only original points and no interpolation.
 - Added explicit aligned CSV export for interpolated wide output.
 - Changed default CSV encoding to UTF-8 with BOM; retained CP1251 as a legacy raw export.

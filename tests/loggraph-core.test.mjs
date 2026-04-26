@@ -43,7 +43,13 @@ function loadAppCore(names, prefix = '') {
   return loadFromSource(appSource, names, prefix);
 }
 function loadParserCore(names, prefix = '') {
-  return loadFromSource(parserCoreSource, names, prefix);
+  const code = [
+    'const self = {};',
+    prefix,
+    parserCoreSource,
+    `return {${names.join(',')}};`
+  ].join('\n');
+  return new Function('TextDecoder', 'TextEncoder', code)(TextDecoder, TextEncoder);
 }
 
 function sha256(textOrBuffer) {
@@ -112,7 +118,7 @@ test('external trace worker is syntactically valid', () => {
   new Function(traceWorkerSource);
 });
 
-test('external parser worker parses sample log', () => {
+test('external parser worker parses sample log', async () => {
   let posted = null;
   const ctx = {
     self: { postMessage: msg => { posted = msg; } },
@@ -135,9 +141,48 @@ test('external parser worker parses sample log', () => {
   vm.createContext(ctx);
   vm.runInContext(parserWorkerSource, ctx);
   const sample = readFileSync(new URL('../data_base/test_base.txt', import.meta.url));
-  ctx.self.onmessage({ data: { buffer: sample.buffer.slice(sample.byteOffset, sample.byteOffset + sample.byteLength) } });
+  ctx.self.onmessage({ data: { buffer: sample.buffer.slice(sample.byteOffset, sample.byteOffset + sample.byteLength), keepText: true } });
+  await new Promise((resolve, reject) => {
+    const started = Date.now();
+    const tick = () => {
+      if(posted) resolve();
+      else if(Date.now() - started > 1000) reject(new Error('parser worker did not post a result'));
+      else setTimeout(tick, 5);
+    };
+    tick();
+  });
   assert.equal(posted.error, null);
   assert.ok(posted.params.length > 0);
+  assert.ok(posted.text.length > 0);
+
+  posted = null;
+  ctx.self.onmessage({ data: { buffer: sample.buffer.slice(sample.byteOffset, sample.byteOffset + sample.byteLength), keepText: false } });
+  await new Promise((resolve, reject) => {
+    const started = Date.now();
+    const tick = () => {
+      if(posted) resolve();
+      else if(Date.now() - started > 1000) reject(new Error('parser worker did not post a second result'));
+      else setTimeout(tick, 5);
+    };
+    tick();
+  });
+  assert.equal(posted.error, null);
+  assert.equal(posted.text, '');
+
+  posted = null;
+  ctx.self.onmessage({ data: { file: new File([sample], 'sample.txt'), keepText: false } });
+  await new Promise((resolve, reject) => {
+    const started = Date.now();
+    const tick = () => {
+      if(posted) resolve();
+      else if(Date.now() - started > 1000) reject(new Error('parser worker did not post a stream result'));
+      else setTimeout(tick, 5);
+    };
+    tick();
+  });
+  assert.equal(posted.error, null);
+  assert.ok(posted.params.length > 0);
+  assert.equal(posted.text, '');
 });
 
 test('external trace worker prepares downsampled trace', () => {
@@ -259,6 +304,23 @@ test('epoch timestamp is the source of truth when present', () => {
   const epochUs = '1774155600000000';
   assert.equal(core.timestampFromParts('01-01-2000', '00:00:00', '000', epochUs), core.epochToMs(epochUs));
   assert.equal(core.timestampFromParts('22-03-2026', '12:00:00', '000', ''), core.wallClockTimestampFromParts('22-03-2026', '12:00:00', '000'));
+  assert.equal(core.normalizeYear('69'), 2069);
+  assert.equal(core.normalizeYear('70'), 1970);
+});
+
+test('wide parser detects epoch column from multiple data rows', () => {
+  const core = loadParserCore(['parseTextCore']);
+  const rows = ['Дата\tВремя\tмс\tmaybe_epoch\tTAG [bar]'];
+  rows.push('22.02.2026\t12:00:00\t000\tbad\t1,0');
+  for(let i = 1; i <= 20; i++){
+    rows.push('22.02.2026\t12:00:' + String(i).padStart(2, '0') + '\t000\t17741556' + String(i).padStart(8, '0') + '\t' + String(i).replace('.', ','));
+  }
+  const parsed = core.parseTextCore(rows.join('\n'));
+  assert.equal(parsed.e, null);
+  assert.equal(parsed.p.length, 1);
+  assert.equal(parsed.p[0].tag, 'TAG [bar]');
+  assert.equal(parsed.p[0].ec, 3);
+  assert.ok(parsed.p[0].data.some(d => d.timeSource === 'epoch'));
 });
 
 test('file parsing is bounded to one or two concurrent files', () => {
@@ -293,6 +355,25 @@ test('signal kind detection separates binary, step, and analog series', () => {
   assert.equal(core.detectSignalKind([{val: 0}, {val: 1}, {val: 1}], 'relay'), 'binary');
   assert.equal(core.detectSignalKind([{val: 103.6}, {val: 103.6}, {val: 104.0}], 'TNR Speed/Load Set Point'), 'step');
   assert.equal(core.detectSignalKind([{val: 10.1}, {val: 10.3}, {val: 10.7}, {val: 11.2}], 'temperature'), 'analog');
+});
+
+test('quality status normalization accepts common good variants', () => {
+  const core = loadAppCore(['isBadQuality']);
+  assert.equal(core.isBadQuality(' GOODLOCALOVERRIDE '), false);
+  assert.equal(core.isBadQuality('0,0'), false);
+  assert.equal(core.isBadQuality('0.00'), false);
+  assert.equal(core.isBadQuality(' SUBSTITUTED '), true);
+});
+
+test('MinMaxLTTB downsampling keeps endpoints and respects budget', () => {
+  const core = loadAppCore(['downsample', 'downsampleMinMax', 'downsampleMinMaxLttb']);
+  const x = Array.from({ length: 1000 }, (_, i) => i);
+  const y = x.map(i => Math.sin(i / 10) + (i === 500 ? 10 : 0));
+  const out = core.downsampleMinMaxLttb(x, y, 80);
+  assert.equal(out.x[0], 0);
+  assert.equal(out.x[out.x.length - 1], 999);
+  assert.ok(out.x.length <= 80);
+  assert.ok(out.y.some(v => v > 9));
 });
 
 test('smart decoder round-trips Windows-1251 log bytes', () => {

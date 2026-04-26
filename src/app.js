@@ -158,7 +158,8 @@ const UNIT_CONVERSIONS = {
 const PAL = ["#22d3ee","#f472b6","#a78bfa","#34d399","#fb923c","#facc15","#f87171","#60a5fa","#c084fc","#4ade80","#e879f9","#38bdf8","#fbbf24","#818cf8","#2dd4bf","#fb7185","#a3e635","#f97316","#67e8f9","#d946ef"];
 const MAX_PTS = 5000;
 const WEBGL_THRESHOLD = 2000; /* use WebGL for traces above this many points — much faster zoom/pan */
-const MAX_INPUT_FILE_BYTES = 250 * 1024 * 1024;
+const MAX_INPUT_FILE_BYTES = 8 * 1024 * 1024 * 1024;
+const MAX_STORED_TEXT_BYTES = 25 * 1024 * 1024;
 const MAX_SESSION_JSON_BYTES = 180 * 1024 * 1024;
 const MAX_SESSION_PARAMS = 3000;
 const MAX_SESSION_POINTS = 12_000_000;
@@ -286,9 +287,11 @@ function getAct(){
   return S.data.AP.filter(p => S.data.SEL.has(p.tag) && p.data.length);
 }
 function isBadQuality(status){
-  const s = String(status == null ? '' : status).trim().toLowerCase();
+  const s = String(status == null ? '' : status).trim().toLowerCase().replace(',', '.');
   if(!s) return false;
-  if(s === '0' || s === 'good' || s === 'ok' || s === 'valid' || s === 'норма' || s === 'норм') return false;
+  const n = Number(s);
+  if(Number.isFinite(n) && n === 0) return false;
+  if(s === 'good' || s === 'ok' || s === 'valid' || s === 'норма' || s === 'норм' || s === 'goodprovider' || s === 'goodlocaloverride') return false;
   if(s === '1' || s.indexOf('bad') !== -1 || s.indexOf('invalid') !== -1 || s.indexOf('fault') !== -1 || s.indexOf('substitut') !== -1 || s.indexOf('подмен') !== -1 || s.indexOf('ошиб') !== -1 || s.indexOf('авар') !== -1) return true;
   return true;
 }
@@ -1188,6 +1191,14 @@ function downsampleMinMax(xArr, yArr, threshold){
   sy.push(yArr[len - 1]);
   return {x: sx, y: sy};
 }
+function downsampleMinMaxLttb(xArr, yArr, threshold){
+  const len = xArr.length;
+  if(threshold >= len || threshold <= 2) return {x: xArr, y: yArr};
+  const preThreshold = Math.min(len, Math.max(threshold * 4, threshold + 2));
+  if(preThreshold >= len) return downsample(xArr, yArr, threshold);
+  const pre = downsampleMinMax(xArr, yArr, preThreshold);
+  return downsample(pre.x, pre.y, threshold);
+}
 
 /* Every-Nth downsampling: simple decimation */
 function downsampleNth(xArr, yArr, threshold){
@@ -1205,6 +1216,7 @@ function downsampleNth(xArr, yArr, threshold){
 
 /* Dispatch to selected algorithm */
 function dsDispatch(xArr, yArr, threshold){
+  if(S.view.DS_ALG === 'minmaxlttb') return downsampleMinMaxLttb(xArr, yArr, threshold);
   if(S.view.DS_ALG === 'minmax') return downsampleMinMax(xArr, yArr, threshold);
   if(S.view.DS_ALG === 'nth') return downsampleNth(xArr, yArr, threshold);
   return downsample(xArr, yArr, threshold);
@@ -1212,8 +1224,8 @@ function dsDispatch(xArr, yArr, threshold){
 
 function setDS(alg){
   S.view.DS_ALG = alg;
-  ['dsLttb','dsMinmax','dsNth'].forEach(id => { $(id).className = 'b'; });
-  const map = {lttb:'dsLttb', minmax:'dsMinmax', nth:'dsNth'};
+  ['dsLttb','dsMinmaxLttb','dsMinmax','dsNth'].forEach(id => { $(id).className = 'b'; });
+  const map = {lttb:'dsLttb', minmaxlttb:'dsMinmaxLttb', minmax:'dsMinmax', nth:'dsNth'};
   if(map[alg]) $(map[alg]).className = 'b on';
   render();
 }
@@ -1308,29 +1320,40 @@ async function parseFilePayload(file){
     throw new Error('браузер не поддерживает Web Workers; парсинг доступен только через parser.worker.js');
   }
 
-  const buffer = await file.arrayBuffer();
+  const keepText = file.size <= MAX_STORED_TEXT_BYTES;
   return await new Promise((resolve, reject) => {
     const worker = new Worker('parser.worker.js');
     const cleanup = () => {
       try{ worker.terminate(); }catch(_e){}
     };
+    const timeoutMs = Math.min(30 * 60 * 1000, Math.max(120000, Math.ceil(file.size / (10 * 1024 * 1024)) * 1000));
     const timer = setTimeout(() => {
       cleanup();
       reject(new Error('таймаут парсинга файла'));
-    }, 120000);
+    }, timeoutMs);
     worker.onmessage = ev => {
       clearTimeout(timer);
       cleanup();
       const data = ev.data || {};
       if(data.error) reject(new Error(data.error));
-      else resolve({file, text: data.text, encoding: data.encoding, bom: !!data.bom, headerIdx: data.headerIdx, params: data.params || []});
+      else resolve({file, text: data.text || '', textStored: keepText && typeof data.text === 'string', encoding: data.encoding, bom: !!data.bom, headerIdx: data.headerIdx, params: data.params || []});
     };
     worker.onerror = ev => {
       clearTimeout(timer);
       cleanup();
       reject(new Error(ev.message || 'ошибка parser worker'));
     };
-    worker.postMessage({buffer}, [buffer]);
+    if(typeof file.stream === 'function'){
+      worker.postMessage({file, keepText});
+    }else{
+      file.arrayBuffer()
+        .then(buffer => worker.postMessage({buffer, keepText}, [buffer]))
+        .catch(err => {
+          clearTimeout(timer);
+          cleanup();
+          reject(err);
+        });
+    }
   });
 }
 function chooseFileParseConcurrency(files){
@@ -1460,7 +1483,10 @@ async function hf(fileList){
         warnings.push(item.file.name + ': merge-конфликты по одинаковым tag+timestamp: ' + res.conflicts);
       }
       /* Store file text for later saving */
-      S.data._fileStore[item.file.name] = { text: item.text, headerIdx: item.headerIdx || 0, encoding: item.encoding || 'utf-8', bom: !!item.bom };
+      S.data._fileStore[item.file.name] = { text: item.text || '', textStored: !!item.textStored, headerIdx: item.headerIdx || 0, encoding: item.encoding || 'utf-8', bom: !!item.bom };
+      if(!item.textStored){
+        warnings.push(item.file.name + ': raw-text не хранится в памяти, сохранение файла с переименованными тегами отключено');
+      }
       /* Set sourceFile on newly parsed params */
       for(const p of res.p){
         if(!p.sourceFile) p.sourceFile = item.file.name;
@@ -2468,6 +2494,7 @@ function replaceHeaderTagCell(cell, oldTag, newTag){
 function saveFile(filename){
   const fd = S.data._fileStore[filename];
   if(!fd){ showErr('Нет данных файла: ' + filename); return; }
+  if(!fd.textStored || !fd.text){ showErr('Исходный текст файла не хранится в памяти для больших логов'); return; }
 
   /* Gather pending renames so the user sees exactly what will be written back. */
   const paramsFromFile = S.data.AP.filter(p => String(p.sourceFile || '').split(',').map(s => s.trim()).includes(filename));
@@ -2513,7 +2540,7 @@ function saveFile(filename){
   const newText = lines.join('\n');
 
   /* Update stored text */
-  S.data._fileStore[filename] = { text: newText, headerIdx: hi, encoding: fd.encoding || 'utf-8', bom: !!fd.bom };
+  S.data._fileStore[filename] = { text: newText, textStored: true, headerIdx: hi, encoding: fd.encoding || 'utf-8', bom: !!fd.bom };
 
   /* Download the modified file */
   let enc = fd.encoding || 'utf-8';
@@ -2537,7 +2564,7 @@ function updAll(){
     span.textContent = name;
     fl.appendChild(span);
     /* Save button per file */
-    if(S.data._fileStore[name]){
+    if(S.data._fileStore[name] && S.data._fileStore[name].textStored){
       const saveBtn = document.createElement('button');
       saveBtn.className = 'b s';
       saveBtn.textContent = '💾';

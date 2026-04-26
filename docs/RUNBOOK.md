@@ -11,6 +11,20 @@ python -m http.server 8080
 
 Open `http://localhost:8080/index.html`.
 
+## Large Files
+
+- File import runs in `parser.worker.js`.
+- When the browser supports `File.stream()`, the worker reads the log as a stream and the main thread does not build a full `arrayBuffer()` for the file.
+- Maximum input file size is 8 GiB. This is an application guardrail, not a promise that every workstation can handle every 8 GiB log.
+- For files larger than 25 MiB, the app does not retain the full source text in memory. Charts, CSV export, sessions, and diagnostics use parsed series, but save-with-renamed-tags is disabled.
+- For moving work between PCs, export a `.pagraph.json.gz` session instead of putting source logs into the portable zip.
+
+## Time And Quality
+
+- If an epoch column exists, epoch is the timestamp source of truth.
+- Without epoch, `Date/Time/ms` columns are interpreted as local browser time on the current PC.
+- Good `status` values are empty status, numeric `0`, `good`, `ok`, `valid`, `норма`, `норм`, `goodprovider`, and `goodlocaloverride`, ignoring case and surrounding whitespace.
+
 ## Verification
 
 ```bash

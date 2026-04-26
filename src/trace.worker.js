@@ -67,6 +67,14 @@ function downsampleMinMax(xArr, yArr, threshold){
   sx.push(xArr[len - 1]); sy.push(yArr[len - 1]);
   return {x: sx, y: sy};
 }
+function downsampleMinMaxLttb(xArr, yArr, threshold){
+  const len = xArr.length;
+  if(threshold >= len || threshold <= 2) return {x: xArr, y: yArr};
+  const preThreshold = Math.min(len, Math.max(threshold * 4, threshold + 2));
+  if(preThreshold >= len) return downsample(xArr, yArr, threshold);
+  const pre = downsampleMinMax(xArr, yArr, preThreshold);
+  return downsample(pre.x, pre.y, threshold);
+}
 function downsampleNth(xArr, yArr, threshold){
   const len = xArr.length;
   if(threshold >= len || threshold <= 2) return {x: xArr, y: yArr};
@@ -79,14 +87,17 @@ function downsampleNth(xArr, yArr, threshold){
   return {x: sx, y: sy};
 }
 function dsDispatch(xArr, yArr, threshold, alg){
+  if(alg === 'minmaxlttb') return downsampleMinMaxLttb(xArr, yArr, threshold);
   if(alg === 'minmax') return downsampleMinMax(xArr, yArr, threshold);
   if(alg === 'nth') return downsampleNth(xArr, yArr, threshold);
   return downsample(xArr, yArr, threshold);
 }
 function isBadQuality(status){
-  const s = String(status == null ? '' : status).trim().toLowerCase();
+  const s = String(status == null ? '' : status).trim().toLowerCase().replace(',', '.');
   if(!s) return false;
-  if(s === '0' || s === 'good' || s === 'ok' || s === 'valid' || s === 'норма' || s === 'норм') return false;
+  const n = Number(s);
+  if(Number.isFinite(n) && n === 0) return false;
+  if(s === 'good' || s === 'ok' || s === 'valid' || s === 'норма' || s === 'норм' || s === 'goodprovider' || s === 'goodlocaloverride') return false;
   return true;
 }
 function isStepKind(k){
