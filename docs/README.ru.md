@@ -88,6 +88,14 @@ powershell -ExecutionPolicy Bypass -File .\make-portable.ps1
 powershell -ExecutionPolicy Bypass -File .\make-portable.ps1 -IncludeSamples
 ```
 
+### Сборка архива для ревью
+
+```powershell
+npm run review:bundle
+```
+
+Архив появится в `dist/log-graph-review-source-*.zip`. Его нужно отправлять на code/architecture review: в нём есть source, docs, tests, CI, vendor и маленький sample. В нём намеренно нет `dist/`, `.git/`, generated HTML и production-логов, чтобы ревью не анализировало старый standalone вместо исходников.
+
 ## Тесты
 
 ```bash
@@ -99,6 +107,7 @@ npm test
 - парсинг wide-лога на приложенном sample;
 - сохранение `status` в grouped-формате;
 - декодирование Windows-1251;
+- декодирование UTF-16LE/UTF-16BE;
 - приоритет epoch-времени над wall-clock колонками, если epoch есть;
 - ограничение параллельного чтения файлов до 1-2 задач, чтобы не взрывать память на больших логах;
 - маркировку merge-конфликтов по одинаковым `tag + timestamp`;

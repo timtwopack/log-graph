@@ -26,6 +26,7 @@ This build focuses on production-readiness issues found in the review of `log-gr
 - Marker import validates array shape and limits item count.
 - Browser persistent storage is requested before saving sessions.
 - Test suite and CI workflow are included.
+- A review-source bundle was added for handing the project to external review without generated artifacts.
 - Build artifact integrity is checked through `build-manifest.json` and tests that compare generated server-runtime files with source files.
 
 ## Compatibility

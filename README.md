@@ -40,3 +40,11 @@ dist/server/         генерируемый статический runtime
 ```powershell
 npm test
 ```
+
+## Bundle Для Ревью
+
+```powershell
+npm run review:bundle
+```
+
+Архив `dist/log-graph-review-source-*.zip` содержит исходники, тесты, документацию, `vendor/`, `.github/` и маленький sample. Он намеренно не содержит `dist/`, `.git/`, generated HTML и production-логи.

@@ -11,6 +11,8 @@
 - Preserve and mark same-`tag + timestamp` conflicts with different values/status as merge conflicts.
 - Save-with-rename now edits only exact header cells instead of replacing every matching substring in the header line.
 - Grouped parser accepts both Russian `Дата/Время` and English `Date/Time` headers.
+- Added `make-review-bundle.ps1` / `npm run review:bundle` so reviews receive the source bundle without generated/stale HTML.
+- Added a regression test for UTF-16LE/UTF-16BE log decoding.
 - Added `signalKind` (`analog`, `binary`, `step`, `setpoint`) and per-parameter override in the sidebar.
 - Added quality filter for excluding non-good status points from charts, statistics, smoothing, and anomaly detection.
 - Replaced ambiguous raw CSV with `raw-long` export that contains only original points and no interpolation.

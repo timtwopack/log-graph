@@ -93,6 +93,16 @@ npm test
 
 Ожидаемый результат: все тесты проходят.
 
+## Передача на ревью
+
+Для code/architecture review собирать отдельный source bundle:
+
+```powershell
+npm run review:bundle
+```
+
+Отправлять `dist/log-graph-review-source-*.zip`. Не отправлять отдельный `log-graph-v091.html` из старых сборок: текущий entrypoint генерируется в `dist/server` и должен проверяться через `npm run build`.
+
 ## Хранилище браузера
 
 Сессии сохраняются в IndexedDB только после команды сохранения/импорта. Пресеты и маркеры используют localStorage. Чтобы очистить всё локальное состояние:

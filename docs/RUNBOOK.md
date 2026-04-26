@@ -19,6 +19,16 @@ npm test
 
 Expected result: all tests pass.
 
+## Review Handoff
+
+For code/architecture review, build the source bundle:
+
+```powershell
+npm run review:bundle
+```
+
+Send `dist/log-graph-review-source-*.zip`. Do not send a standalone `log-graph-v091.html` from older builds; the current entrypoint is generated under `dist/server` and should be checked through `npm run build`.
+
 ## Browser Storage
 
 Sessions are stored in IndexedDB only after the user selects save/import. Presets and markers use localStorage. To clear all local state:

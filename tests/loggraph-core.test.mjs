@@ -252,6 +252,25 @@ test('smart decoder round-trips Windows-1251 log bytes', () => {
   assert.match(decoded.text, /Температура \[°C\]/);
 });
 
+test('smart decoder round-trips UTF-16LE and UTF-16BE log bytes', () => {
+  const core = loadCore([
+    'stripImportedControlChars',
+    'cleanCell',
+    'stripBom',
+    'scoreDecodedLog',
+    'decodeWithLabel',
+    'decodeBytesSmart',
+    'toUtf16Le',
+    'encodeTextBytes'
+  ]);
+  const source = 'Дата\tВремя\tмс\tДавление [бар]\n22.02.2026\t12:00:00\t000\t20,5';
+  for(const encoding of ['utf-16le', 'utf-16be']){
+    const decoded = core.decodeBytesSmart(core.encodeTextBytes(source, encoding));
+    assert.equal(decoded.encoding, encoding);
+    assert.match(decoded.text, /Давление \[бар\]/);
+  }
+});
+
 test('CSV escaping quotes semicolons, quotes, and line breaks', () => {
   const core = loadCore(['csvCell', 'rowsToCsv']);
   const csv = core.rowsToCsv([
