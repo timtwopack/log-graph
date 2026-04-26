@@ -1,6 +1,6 @@
 # Release Notes: Review Hardening Build
 
-This build focuses on production-readiness issues found in the review of `log-graph-v091`.
+This build focuses on production-readiness issues found in the review of `log-graph`.
 
 ## Data Correctness
 

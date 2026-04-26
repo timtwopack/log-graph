@@ -1,6 +1,6 @@
 # Release Notes: Review Hardening Build
 
-Эта сборка закрывает production-readiness замечания из ревью `log-graph-v091`.
+Эта сборка закрывает production-readiness замечания из ревью `log-graph`.
 
 ## Корректность данных
 

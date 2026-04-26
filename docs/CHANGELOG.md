@@ -4,6 +4,7 @@
 
 - Added encoding-aware input loader for UTF-8, Windows-1251, UTF-16LE, and UTF-16BE files.
 - Moved file decoding/parsing to `parser.worker.js` for static-server runs.
+- Split parser core into `src/parser-core.js` with a thin worker wrapper.
 - Removed duplicate main-thread/blob parser fallbacks; static serving is now required for imports.
 - Added optional `trace.worker.js` precompute path for initial downsampling/cache warmup.
 - Preserved grouped-format `status` values per point.
@@ -27,4 +28,5 @@
 - Added `tools/build.mjs` to build the single supported server runtime.
 - Added `build-manifest.json` with SHA-256 input hashes and tests that guard against source/server drift.
 - App version is now injected from `package.json` during build.
+- Runtime entrypoint is now `index.html`; old versioned standalone names are legacy only.
 - Portable zip is now only a package of the supported server runtime plus `serve-local.ps1`.

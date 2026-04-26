@@ -172,6 +172,89 @@ fi.addEventListener('change', e => {
 });
 
 function $(id){ return document.getElementById(id); }
+function wireStaticUi(){
+  const actionHandlers = {
+    'toggle-sidebar': () => togSidebar(),
+    'toggle-help': () => togHelp(),
+    'toggle-theme': () => togTheme(),
+    'toggle-measure': () => togMeasure(),
+    'zoom-back': () => zoomBack(),
+    'zoom-forward': () => zoomForward(),
+    'toggle-export-menu': () => togExportMenu(),
+    'export-csv': el => { exportCSV(el.dataset.mode, el.dataset.encoding); closeExportMenu(); },
+    'export-png': () => { exportPNG(); closeExportMenu(); },
+    'toggle-session-menu': () => togSessionMenu(),
+    'save-session': () => { saveSession(); closeSessionMenu(); },
+    'export-session': () => { exportSessionToFile(); closeSessionMenu(); },
+    'import-session': () => { importSessionFromFile(); closeSessionMenu(); },
+    'export-diagnostics': () => { exportDiagnostics(); closeSessionMenu(); },
+    'open-files': () => $('fi').click(),
+    'reset-all': () => resetAll(),
+    'save-preset': () => savePreset(),
+    'select-all': () => selAll(),
+    'select-none': () => selNone(),
+    'reset-time-range': () => rstTR(),
+    'export-markers-json': () => exportMarkersJSON(),
+    'import-markers': () => importMarkersClick(),
+    'export-markers-csv': () => exportMarkersCSV(),
+    'toggle-add-marker': () => togAddMarker(),
+    'clear-markers': () => clearAllMarkers(),
+    'set-display-mode': el => setM(el.dataset.mode),
+    'set-plot-mode': el => setPlotMode(el.dataset.mode),
+    'toggle-connect-gaps': () => togCgaps(),
+    'toggle-range-slider': () => togRslider(),
+    'toggle-quality-filter': () => togQualityFilter(),
+    'set-smooth': el => setSmooth(el.dataset.mode),
+    'toggle-smooth-original': () => togSmoothOrig(),
+    'set-downsample': el => setDS(el.dataset.mode),
+    'toggle-anomaly': () => togAnomaly(),
+    'toggle-t0': () => togT0(),
+    'reset-t0': () => resetT0(),
+    'reset-y': () => rstY(),
+    'clear-cursors': () => clearCursors()
+  };
+  const inputHandlers = {
+    'tag-search': el => setTagSearch(el.value),
+    'height': el => setH(el.value),
+    'axis-spacing': el => setAxisSpacing(el.value),
+    'font-scale': el => setFontScale(el.value),
+    'time-range': () => onTR(),
+    'manual-x-range': () => onMXR(),
+    'marker-search': el => setMarkerSearch(el.value),
+    'smooth-strength': el => setSmoothStr(el.value),
+    'y-range': () => onYR()
+  };
+  const changeHandlers = {
+    'xy-param': el => setXYParam(el.value),
+    'render': () => render()
+  };
+
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-action]');
+    if(!el) return;
+    const handler = actionHandlers[el.dataset.action];
+    if(!handler) return;
+    e.preventDefault();
+    handler(el, e);
+  });
+  document.addEventListener('input', e => {
+    const el = e.target;
+    const handler = inputHandlers[el && el.dataset ? el.dataset.input : ''];
+    if(handler) handler(el, e);
+  });
+  document.addEventListener('change', e => {
+    const el = e.target;
+    const handler = changeHandlers[el && el.dataset ? el.dataset.change : ''];
+    if(handler) handler(el, e);
+  });
+
+  const ca = $('ca');
+  if(ca){
+    ca.addEventListener('drop', onDrop);
+    ca.addEventListener('dragover', onDgOv);
+    ca.addEventListener('dragleave', onDgLv);
+  }
+}
 function pad2(n){ return String(n).padStart(2, '0'); }
 function pn(p){ return p.cn || p.shortName || p.tag; }
 function gc(p){ return S.style.PC[p.tag] || PAL[0]; }
@@ -2460,7 +2543,7 @@ function updAll(){
       saveBtn.textContent = '💾';
       saveBtn.title = 'Сохранить ' + name + ' с изменёнными тегами';
       saveBtn.style.cssText = 'margin-left:2px;padding:2px 6px;font-size:11px';
-      saveBtn.onclick = () => saveFile(name);
+      saveBtn.addEventListener('click', () => saveFile(name));
       fl.appendChild(saveBtn);
     }
   });
@@ -4641,13 +4724,13 @@ async function renderSessionSlots(){
     const ts = rec.savedAt ? new Date(rec.savedAt).toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : '';
     bt.textContent = rec.name;
     bt.title = ts ? ('Сохранено: ' + ts) : rec.name;
-    bt.onclick = () => loadSession(rec.name);
+    bt.addEventListener('click', () => loadSession(rec.name));
     const del = document.createElement('button');
     del.className = 'ddi';
     del.style.cssText = 'flex:0 0 auto;padding:6px 10px;color:#f87171;width:auto';
     del.textContent = '✕';
     del.title = 'Удалить';
-    del.onclick = (ev) => { ev.stopPropagation(); deleteSession(rec.name); };
+    del.addEventListener('click', ev => { ev.stopPropagation(); deleteSession(rec.name); });
     row.appendChild(bt);
     row.appendChild(del);
     host.appendChild(row);
@@ -4888,7 +4971,7 @@ function _createChartBox(ct, tkey, defaultVal, placeholder, h){
   const inp = document.createElement('input');
   inp.value = S.style.CTT[tkey] || defaultVal || '';
   inp.placeholder = placeholder || '';
-  inp.oninput = e => { S.style.CTT[tkey] = e.target.value; };
+  inp.addEventListener('input', e => { S.style.CTT[tkey] = e.target.value; });
   tr.appendChild(inp);
   const pd = document.createElement('div');
   pd.className = 'plotdiv';
@@ -5526,6 +5609,7 @@ document.addEventListener('keydown', e => {
 });
 
 (function(){
+  wireStaticUi();
   S.ui.READY = true;
   loadMarkersLocal();
   loadPresetsLocal();

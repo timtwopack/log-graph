@@ -9,7 +9,7 @@ cd dist/server
 python -m http.server 8080
 ```
 
-Open `http://localhost:8080/log-graph-v091.html`.
+Open `http://localhost:8080/index.html`.
 
 ## Verification
 
@@ -27,7 +27,7 @@ For code/architecture review, build the source bundle:
 npm run review:bundle
 ```
 
-Send `dist/log-graph-review-source-*.zip`. Do not send a standalone `log-graph-v091.html` from older builds; the current entrypoint is generated under `dist/server` and should be checked through `npm run build`.
+Send `dist/log-graph-review-source-*.zip`. Do not send a standalone `log-graph-v091.html` from older builds; the current entrypoint is generated as `dist/server/index.html` and should be checked through `npm run build`.
 
 ## Browser Storage
 

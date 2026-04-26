@@ -24,7 +24,7 @@ $ServerDir = Join-Path $PSScriptRoot 'dist\server'
 if (Test-Path $BundleDir) { Remove-Item -LiteralPath $BundleDir -Recurse -Force }
 New-Item -ItemType Directory -Path $BundleDir | Out-Null
 
-if (-not (Test-Path (Join-Path $ServerDir 'log-graph-v091.html'))) {
+if (-not (Test-Path (Join-Path $ServerDir 'index.html'))) {
   throw "dist\server is missing. Run npm run build first."
 }
 

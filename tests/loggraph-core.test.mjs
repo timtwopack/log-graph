@@ -1,15 +1,18 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { test } from 'node:test';
 import vm from 'node:vm';
 
 const appSource = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
-const parserSource = readFileSync(new URL('../parser.worker.js', import.meta.url), 'utf8');
+const parserCoreSource = readFileSync(new URL('../src/parser-core.js', import.meta.url), 'utf8');
+const parserWorkerSource = readFileSync(new URL('../src/parser.worker.js', import.meta.url), 'utf8');
+const traceWorkerSource = readFileSync(new URL('../src/trace.worker.js', import.meta.url), 'utf8');
 const templateSource = readFileSync(new URL('../src/index.template.html', import.meta.url), 'utf8');
 const styleSource = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const packageSource = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
-const serverHtml = readFileSync(new URL('../dist/server/log-graph-v091.html', import.meta.url), 'utf8');
+const serverHtml = readFileSync(new URL('../dist/server/index.html', import.meta.url), 'utf8');
 const builtAppSource = readFileSync(new URL('../dist/server/app.js', import.meta.url), 'utf8');
 const buildManifest = JSON.parse(readFileSync(new URL('../dist/server/build-manifest.json', import.meta.url), 'utf8'));
 const packageJson = JSON.parse(packageSource);
@@ -40,11 +43,37 @@ function loadAppCore(names, prefix = '') {
   return loadFromSource(appSource, names, prefix);
 }
 function loadParserCore(names, prefix = '') {
-  return loadFromSource(parserSource, names, prefix);
+  return loadFromSource(parserCoreSource, names, prefix);
 }
 
 function sha256(textOrBuffer) {
   return createHash('sha256').update(textOrBuffer).digest('hex');
+}
+
+function startStaticServer(rootUrl) {
+  const server = createServer((req, res) => {
+    try{
+      const rawPath = (req.url || '/').split('?', 1)[0] || '/';
+      if(rawPath.includes('..')){
+        res.writeHead(403);
+        res.end('Forbidden');
+        return;
+      }
+      const path = rawPath === '/' ? '/index.html' : rawPath;
+      const body = readFileSync(new URL('.' + path, rootUrl));
+      res.writeHead(200, {'Content-Type': 'application/octet-stream'});
+      res.end(body);
+    }catch(_e){
+      res.writeHead(404);
+      res.end('Not found');
+    }
+  });
+  return new Promise(resolve => {
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      resolve({server, baseUrl: `http://127.0.0.1:${address.port}`});
+    });
+  });
 }
 
 test('main inline script is syntactically valid', () => {
@@ -54,6 +83,7 @@ test('main inline script is syntactically valid', () => {
 test('build emits the static-server runtime', () => {
   assert.match(serverHtml, /<link rel="stylesheet" href="styles\.css" \/>/);
   assert.match(serverHtml, /<script src="app\.js"><\/script>/);
+  assert.doesNotMatch(serverHtml, /\son(?:click|input|change|drop|dragover|dragleave|keydown|keyup|submit)=/i);
   assert.doesNotMatch(serverHtml, /function parseTextCore/);
   assert.doesNotMatch(appSource, /function parseTextCore/);
   assert.doesNotMatch(appSource, /function decodeBytesSmart/);
@@ -61,31 +91,37 @@ test('build emits the static-server runtime', () => {
 });
 
 test('build manifest matches the current source files', () => {
-  assert.equal(buildManifest.entrypoint, 'log-graph-v091.html');
+  assert.equal(buildManifest.entrypoint, 'index.html');
   assert.equal(buildManifest.sources['src/index.template.html'], sha256(templateSource));
   assert.equal(buildManifest.sources['src/styles.css'], sha256(styleSource));
   assert.equal(buildManifest.sources['src/app.js'], sha256(appSource));
   assert.equal(buildManifest.sources['package.json'], sha256(packageSource));
+  assert.equal(buildManifest.sources['src/parser-core.js'], sha256(parserCoreSource));
+  assert.equal(buildManifest.sources['src/parser.worker.js'], sha256(parserWorkerSource));
+  assert.equal(buildManifest.sources['src/trace.worker.js'], sha256(traceWorkerSource));
   assert.match(serverHtml, new RegExp(`PA·GRAPH v${packageJson.version.replaceAll('.', '\\.')}`));
   assert.match(builtAppSource, new RegExp(`const APP_VERSION = '${packageJson.version.replaceAll('.', '\\.')}'`));
   assert.doesNotMatch(builtAppSource, /__APP_VERSION__/);
 });
 
 test('external parser worker is syntactically valid', () => {
-  const worker = readFileSync(new URL('../parser.worker.js', import.meta.url), 'utf8');
-  new Function(worker);
+  new Function(parserWorkerSource);
 });
 
 test('external trace worker is syntactically valid', () => {
-  const worker = readFileSync(new URL('../trace.worker.js', import.meta.url), 'utf8');
-  new Function(worker);
+  new Function(traceWorkerSource);
 });
 
 test('external parser worker parses sample log', () => {
-  const worker = readFileSync(new URL('../parser.worker.js', import.meta.url), 'utf8');
   let posted = null;
   const ctx = {
     self: { postMessage: msg => { posted = msg; } },
+    importScripts: (...paths) => {
+      for(const path of paths){
+        if(path !== 'parser-core.js') throw new Error(`unexpected importScripts path: ${path}`);
+        vm.runInContext(parserCoreSource, ctx);
+      }
+    },
     TextDecoder,
     Date,
     Number,
@@ -97,7 +133,7 @@ test('external parser worker parses sample log', () => {
     Set
   };
   vm.createContext(ctx);
-  vm.runInContext(worker, ctx);
+  vm.runInContext(parserWorkerSource, ctx);
   const sample = readFileSync(new URL('../data_base/test_base.txt', import.meta.url));
   ctx.self.onmessage({ data: { buffer: sample.buffer.slice(sample.byteOffset, sample.byteOffset + sample.byteLength) } });
   assert.equal(posted.error, null);
@@ -105,7 +141,6 @@ test('external parser worker parses sample log', () => {
 });
 
 test('external trace worker prepares downsampled trace', () => {
-  const worker = readFileSync(new URL('../trace.worker.js', import.meta.url), 'utf8');
   let posted = null;
   const ctx = {
     self: { postMessage: msg => { posted = msg; } },
@@ -118,7 +153,7 @@ test('external trace worker prepares downsampled trace', () => {
     Set
   };
   vm.createContext(ctx);
-  vm.runInContext(worker, ctx);
+  vm.runInContext(traceWorkerSource, ctx);
   ctx.self.onmessage({ data: { items: [{
     key: 'k',
     param: {
@@ -135,6 +170,17 @@ test('external trace worker prepares downsampled trace', () => {
   assert.equal(posted.error, null);
   assert.equal(posted.items[0].key, 'k');
   assert.ok(posted.items[0].data.yDisp.length <= 22);
+});
+
+test('built runtime assets are fetchable over HTTP', async t => {
+  const {server, baseUrl} = await startStaticServer(new URL('../dist/server/', import.meta.url));
+  t.after(() => server.close());
+  for(const path of ['/index.html', '/app.js', '/parser-core.js', '/parser.worker.js', '/trace.worker.js', '/vendor/plotly-3.5.0.min.js']){
+    const res = await fetch(baseUrl + path);
+    assert.equal(res.status, 200, `${path} is served`);
+    const text = await res.text();
+    assert.ok(text.length > 0, `${path} has content`);
+  }
 });
 
 test('parser handles sample wide log and strips hidden bidi controls', () => {

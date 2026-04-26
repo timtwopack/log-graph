@@ -213,20 +213,18 @@ function parseTextCore(text){
   return {p: params, e: null};
 }
 
-self.onmessage = function(e){
-  try{
-    const bytes = new Uint8Array(e.data.buffer);
-    const decoded = decodeBytesSmart(bytes);
-    const parsed = parseTextCore(decoded.text);
-    self.postMessage({
-      text: decoded.text,
-      encoding: decoded.encoding,
-      bom: !!decoded.bom,
-      headerIdx: headerIndexFromText(decoded.text),
-      params: parsed.p,
-      error: parsed.e || null
-    });
-  }catch(err){
-    self.postMessage({text: '', encoding: '', headerIdx: 0, params: [], error: err && err.message ? err.message : String(err)});
-  }
+self.LogGraphParser = {
+  stripImportedControlChars,
+  cleanCell,
+  stripBom,
+  scoreDecodedLog,
+  decodeWithLabel,
+  decodeBytesSmart,
+  normalizeYear,
+  epochToMs,
+  wallClockTimestampFromParts,
+  timestampFromParts,
+  shortNameFromTag,
+  headerIndexFromText,
+  parseTextCore
 };

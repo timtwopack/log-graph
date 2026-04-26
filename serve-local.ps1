@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 
 if ([string]::IsNullOrWhiteSpace($Root)) {
   $BuiltRoot = Join-Path $PSScriptRoot 'dist\server'
-  if (Test-Path (Join-Path $BuiltRoot 'log-graph-v091.html')) {
+  if (Test-Path (Join-Path $BuiltRoot 'index.html')) {
     $Root = $BuiltRoot
   } else {
     $Root = $PSScriptRoot
@@ -54,7 +54,7 @@ function Write-HttpResponse {
     "Content-Length: $($Body.Length)`r`n" +
     "Cache-Control: no-store`r`n" +
     "X-Content-Type-Options: nosniff`r`n" +
-    "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`r`n" +
+    "Content-Security-Policy: default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`r`n" +
     "Referrer-Policy: no-referrer`r`n" +
     "Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`r`n" +
     "Cross-Origin-Opener-Policy: same-origin`r`n" +
@@ -73,7 +73,7 @@ function Resolve-RequestPath {
 
   $PathPart = ($Target -split '\?', 2)[0]
   if ([string]::IsNullOrWhiteSpace($PathPart) -or $PathPart -eq '/') {
-    $PathPart = '/log-graph-v091.html'
+    $PathPart = '/index.html'
   }
 
   $Decoded = [System.Uri]::UnescapeDataString($PathPart)
@@ -89,7 +89,7 @@ function Resolve-RequestPath {
 $Listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
 $Listener.Start()
 
-$Url = "http://127.0.0.1:$Port/log-graph-v091.html"
+$Url = "http://127.0.0.1:$Port/index.html"
 Write-Host "PA-GRAPH local server"
 Write-Host "Root: $RootFull"
 Write-Host "URL : $Url"

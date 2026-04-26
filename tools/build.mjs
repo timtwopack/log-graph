@@ -15,11 +15,12 @@ const templatePath = join(srcDir, 'index.template.html');
 const stylesPath = join(srcDir, 'styles.css');
 const appPath = join(srcDir, 'app.js');
 const vendorPath = join(repoRoot, 'vendor', 'plotly-3.5.0.min.js');
-const parserWorkerPath = join(repoRoot, 'parser.worker.js');
-const traceWorkerPath = join(repoRoot, 'trace.worker.js');
+const parserCorePath = join(srcDir, 'parser-core.js');
+const parserWorkerPath = join(srcDir, 'parser.worker.js');
+const traceWorkerPath = join(srcDir, 'trace.worker.js');
 const packagePath = join(repoRoot, 'package.json');
 
-for (const path of [templatePath, stylesPath, appPath, vendorPath, parserWorkerPath, traceWorkerPath, packagePath]) {
+for (const path of [templatePath, stylesPath, appPath, vendorPath, parserCorePath, parserWorkerPath, traceWorkerPath, packagePath]) {
   if (!existsSync(path)) throw new Error(`Missing required build input: ${path}`);
 }
 
@@ -51,27 +52,30 @@ const appVersion = String(packageJson.version || '0.0.0');
 const builtTemplate = template.replaceAll('__APP_VERSION__', appVersion);
 const builtApp = app.replaceAll('__APP_VERSION__', appVersion);
 
-writeFileSync(join(serverDir, 'log-graph-v091.html'), builtTemplate);
+writeFileSync(join(serverDir, 'index.html'), builtTemplate);
 writeFileSync(join(serverDir, 'styles.css'), styles);
 writeFileSync(join(serverDir, 'app.js'), builtApp);
+copyFileSync(parserCorePath, join(serverDir, 'parser-core.js'));
 copyFileSync(parserWorkerPath, join(serverDir, 'parser.worker.js'));
 copyFileSync(traceWorkerPath, join(serverDir, 'trace.worker.js'));
 ensureDir(join(serverDir, 'vendor'));
 copyFileSync(vendorPath, join(serverDir, 'vendor', 'plotly-3.5.0.min.js'));
 
+const parserCore = readFileSync(parserCorePath);
 const parserWorker = readFileSync(parserWorkerPath);
 const traceWorker = readFileSync(traceWorkerPath);
 const plotlyBuffer = readFileSync(vendorPath);
 const manifest = {
-  entrypoint: 'log-graph-v091.html',
+  entrypoint: 'index.html',
   mode: 'static-server',
   sources: {
     'src/index.template.html': sha256(template),
     'src/styles.css': sha256(styles),
     'src/app.js': sha256(app),
     'package.json': sha256(packageText),
-    'parser.worker.js': sha256(parserWorker),
-    'trace.worker.js': sha256(traceWorker),
+    'src/parser-core.js': sha256(parserCore),
+    'src/parser.worker.js': sha256(parserWorker),
+    'src/trace.worker.js': sha256(traceWorker),
     'vendor/plotly-3.5.0.min.js': sha256(plotlyBuffer)
   }
 };

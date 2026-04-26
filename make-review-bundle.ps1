@@ -26,10 +26,8 @@ $IncludePaths = @(
   'make-portable.ps1',
   'make-review-bundle.ps1',
   'package.json',
-  'parser.worker.js',
   'README.md',
-  'serve-local.ps1',
-  'trace.worker.js'
+  'serve-local.ps1'
 )
 
 foreach ($RelPath in $IncludePaths) {

@@ -11,41 +11,41 @@
 <div id="loader"><div class="spin"></div><div class="st" id="lst">Инициализация...</div></div>
 <div id="app">
   <div id="hdr">
-    <button class="b sidebar-toggle" id="bsidebar" onclick="togSidebar()">☰</button>
+    <button class="b sidebar-toggle" id="bsidebar" data-action="toggle-sidebar">☰</button>
     <div class="logo"><div class="dot" id="sdot"></div><span class="ttl">PA·GRAPH</span><span class="ver">v__APP_VERSION__</span></div>
     <div id="fls"></div>
     <div id="hdr-act">
-      <button class="b" id="bhelp" onclick="togHelp()" title="Справка (F1)">? Справка</button>
-      <button class="b" id="bthm" onclick="togTheme()">☀</button>
-      <button class="b" id="bmarkers" onclick="togMeasure()" title="Курсоры A/B для измерения диапазона (Δt, Min/Max/Avg)">📏 Измерение</button>
-      <button class="b s" id="bzback" onclick="zoomBack()" title="Откатить зум (Alt+←)" disabled>◀</button>
-      <button class="b s" id="bzfwd" onclick="zoomForward()" title="Повторить зум (Alt+→)" disabled>▶</button>
+      <button class="b" id="bhelp" data-action="toggle-help" title="Справка (F1)">? Справка</button>
+      <button class="b" id="bthm" data-action="toggle-theme">☀</button>
+      <button class="b" id="bmarkers" data-action="toggle-measure" title="Курсоры A/B для измерения диапазона (Δt, Min/Max/Avg)">📏 Измерение</button>
+      <button class="b s" id="bzback" data-action="zoom-back" title="Откатить зум (Alt+←)" disabled>◀</button>
+      <button class="b s" id="bzfwd" data-action="zoom-forward" title="Повторить зум (Alt+→)" disabled>▶</button>
       <div class="dd" id="ddexp">
-        <button class="b" onclick="togExportMenu()" title="Экспорт CSV / PNG">⬇ Экспорт ▾</button>
+        <button class="b" data-action="toggle-export-menu" title="Экспорт CSV / PNG">⬇ Экспорт ▾</button>
         <div class="ddmenu" id="ddexpm">
-          <button class="ddi" onclick="exportCSV('raw-long');closeExportMenu()" title="Исходные точки без интерполяции: время, тег, значение, статус, файл">⬇ CSV сырой long</button>
-          <button class="ddi" onclick="exportCSV('aligned');closeExportMenu()" title="Выровненная таблица по объединённой временной сетке с интерполяцией">⬇ CSV выровненный</button>
-          <button class="ddi" onclick="exportCSV('thin');closeExportMenu()" title="Прореженные данные по текущему алгоритму">⬇ CSV прореженный</button>
-          <button class="ddi" onclick="exportCSV('visible');closeExportMenu()" title="Только текущий видимый диапазон оси X">⬇ CSV видимый</button>
-          <button class="ddi" onclick="exportCSV('raw-long','windows-1251');closeExportMenu()" title="Legacy-экспорт для старого Excel; часть Unicode заменяется ASCII">⬇ CSV сырой CP1251</button>
+          <button class="ddi" data-action="export-csv" data-mode="raw-long" title="Исходные точки без интерполяции: время, тег, значение, статус, файл">⬇ CSV сырой long</button>
+          <button class="ddi" data-action="export-csv" data-mode="aligned" title="Выровненная таблица по объединённой временной сетке с интерполяцией">⬇ CSV выровненный</button>
+          <button class="ddi" data-action="export-csv" data-mode="thin" title="Прореженные данные по текущему алгоритму">⬇ CSV прореженный</button>
+          <button class="ddi" data-action="export-csv" data-mode="visible" title="Только текущий видимый диапазон оси X">⬇ CSV видимый</button>
+          <button class="ddi" data-action="export-csv" data-mode="raw-long" data-encoding="windows-1251" title="Legacy-экспорт для старого Excel; часть Unicode заменяется ASCII">⬇ CSV сырой CP1251</button>
           <div class="dds"></div>
-          <button class="ddi" onclick="exportPNG();closeExportMenu()" title="Экспорт PNG">⬇ PNG</button>
+          <button class="ddi" data-action="export-png" title="Экспорт PNG">⬇ PNG</button>
         </div>
       </div>
       <div class="dd" id="ddsession">
-        <button class="b" onclick="togSessionMenu()" title="Сохранить / загрузить сессию">💾 Сессия ▾</button>
+        <button class="b" data-action="toggle-session-menu" title="Сохранить / загрузить сессию">💾 Сессия ▾</button>
         <div class="ddmenu" id="ddsessionm" style="min-width:260px">
-          <button class="ddi" onclick="saveSession();closeSessionMenu()" title="Сохранить текущее состояние и данные в браузер">💾 Сохранить в браузер…</button>
-          <button class="ddi" onclick="exportSessionToFile();closeSessionMenu()" title="Скачать текущую сессию как .pagraph.json файл">📤 Экспорт в файл</button>
-          <button class="ddi" onclick="importSessionFromFile();closeSessionMenu()" title="Загрузить сессию из .pagraph.json файла">📥 Импорт из файла…</button>
-          <button class="ddi" onclick="exportDiagnostics();closeSessionMenu()" title="Скачать локальный отчёт по ошибкам, производительности и загруженным данным">🧪 Диагностика JSON</button>
+          <button class="ddi" data-action="save-session" title="Сохранить текущее состояние и данные в браузер">💾 Сохранить в браузер…</button>
+          <button class="ddi" data-action="export-session" title="Скачать текущую сессию как .pagraph.json файл">📤 Экспорт в файл</button>
+          <button class="ddi" data-action="import-session" title="Загрузить сессию из .pagraph.json файла">📥 Импорт из файла…</button>
+          <button class="ddi" data-action="export-diagnostics" title="Скачать локальный отчёт по ошибкам, производительности и загруженным данным">🧪 Диагностика JSON</button>
           <div class="dds"></div>
           <div id="sessionslots" style="max-height:240px;overflow-y:auto"></div>
         </div>
       </div>
       <input type="file" id="sessionImport" accept=".json,.gz,.pagraph.json,.pagraph.json.gz,application/json,application/gzip" style="display:none" />
-      <button class="b ac" id="bopen" onclick="fi.click()">Открыть</button>
-      <button class="b dng" id="brst" style="display:none" onclick="resetAll()">Сброс</button>
+      <button class="b ac" id="bopen" data-action="open-files">Открыть</button>
+      <button class="b dng" id="brst" style="display:none" data-action="reset-all">Сброс</button>
     </div>
     <input type="file" id="fi" accept=".txt,.csv,.log,.tsv,.dat" multiple style="display:none" />
   </div>
@@ -54,97 +54,97 @@
       <div id="presetsec">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
           <div class="lbl">Пресеты</div>
-          <button class="b s" onclick="savePreset()" title="Сохранить текущий вид">+ Сохранить</button>
+          <button class="b s" data-action="save-preset" title="Сохранить текущий вид">+ Сохранить</button>
         </div>
         <div id="presets-list"></div>
       </div>
       <div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
           <div class="lbl" id="pcnt">Параметры (0)</div>
-          <div style="display:flex;gap:2px"><button class="b s" onclick="selAll()">Все</button><button class="b s" onclick="selNone()">⊘</button></div>
+          <div style="display:flex;gap:2px"><button class="b s" data-action="select-all">Все</button><button class="b s" data-action="select-none">⊘</button></div>
         </div>
-        <div class="psearch"><input type="text" id="psearch" placeholder="🔍 Поиск по тегу / имени..." oninput="setTagSearch(this.value)" /></div>
+        <div class="psearch"><input type="text" id="psearch" placeholder="🔍 Поиск по тегу / имени..." data-input="tag-search" /></div>
         <div class="pl" id="plist"></div>
       </div>
       <div>
         <div class="lbl">Размеры</div>
         <div style="display:flex;flex-direction:column;gap:6px">
-          <div><div style="font-size:11px;opacity:0.7;margin-bottom:2px" id="hlbl">Высота: авто</div><input type="range" min="0" max="1500" value="0" step="10" id="hsl" oninput="setH(this.value)" /></div>
-          <div><div style="font-size:11px;opacity:0.7;margin-bottom:2px" id="axslbl">Расст. осей Y: 55px</div><input type="range" min="15" max="120" value="55" step="1" id="axsl" oninput="setAxisSpacing(this.value)" /></div>
-          <div><div style="font-size:11px;opacity:0.7;margin-bottom:2px" id="fsslbl">Шрифт графика: 100%</div><input type="range" min="70" max="200" value="100" step="5" id="fssl" oninput="setFontScale(this.value)" title="Масштаб шрифтов осей и подписей графика. Пригодно для экспорта в PNG — крупнее для печати." /></div>
+          <div><div style="font-size:11px;opacity:0.7;margin-bottom:2px" id="hlbl">Высота: авто</div><input type="range" min="0" max="1500" value="0" step="10" id="hsl" data-input="height" /></div>
+          <div><div style="font-size:11px;opacity:0.7;margin-bottom:2px" id="axslbl">Расст. осей Y: 55px</div><input type="range" min="15" max="120" value="55" step="1" id="axsl" data-input="axis-spacing" /></div>
+          <div><div style="font-size:11px;opacity:0.7;margin-bottom:2px" id="fsslbl">Шрифт графика: 100%</div><input type="range" min="70" max="200" value="100" step="5" id="fssl" data-input="font-scale" title="Масштаб шрифтов осей и подписей графика. Пригодно для экспорта в PNG — крупнее для печати." /></div>
         </div>
       </div>
       <div id="tsec" style="display:none">
         <div class="lbl">Ось X - время</div>
         <div style="font-size:10px;opacity:0.35;margin-bottom:2px" id="tsl"></div>
         <div style="font-size:10px;opacity:0.35;margin-bottom:4px" id="tel"></div>
-        <div style="margin-bottom:2px"><div style="font-size:10px;opacity:0.35;margin-bottom:1px">От</div><input type="range" id="tfr" oninput="onTR()" /></div>
-        <div style="margin-bottom:2px"><div style="font-size:10px;opacity:0.35;margin-bottom:1px">До</div><input type="range" id="tto" oninput="onTR()" /></div>
+        <div style="margin-bottom:2px"><div style="font-size:10px;opacity:0.35;margin-bottom:1px">От</div><input type="range" id="tfr" data-input="time-range" /></div>
+        <div style="margin-bottom:2px"><div style="font-size:10px;opacity:0.35;margin-bottom:1px">До</div><input type="range" id="tto" data-input="time-range" /></div>
         <div style="display:flex;justify-content:space-between"><span style="font-size:10px;opacity:0.35" id="tfv"></span><span style="font-size:10px;opacity:0.35" id="ttv"></span></div>
-        <div class="ar" style="margin-top:3px"><input class="ai" id="xfm" type="text" placeholder="чч:мм:сс" oninput="onMXR()" /><span style="opacity:0.3">-</span><input class="ai" id="xtm" type="text" placeholder="чч:мм:сс" oninput="onMXR()" /></div>
-        <button class="b s" style="margin-top:3px" onclick="rstTR()">Авто X</button>
+        <div class="ar" style="margin-top:3px"><input class="ai" id="xfm" type="text" placeholder="чч:мм:сс" data-input="manual-x-range" /><span style="opacity:0.3">-</span><input class="ai" id="xtm" type="text" placeholder="чч:мм:сс" data-input="manual-x-range" /></div>
+        <button class="b s" style="margin-top:3px" data-action="reset-time-range">Авто X</button>
       </div>
       <div id="markersec">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
           <div class="lbl">Маркеры (<span id="mcount">0</span>)</div>
           <div style="display:flex;gap:2px">
-            <button class="b s" onclick="exportMarkersJSON()" title="Экспорт в JSON">⬇</button>
-            <button class="b s" onclick="importMarkersClick()" title="Импорт из JSON">⬆</button>
-            <button class="b s" onclick="exportMarkersCSV()" title="Экспорт в CSV">CSV</button>
+            <button class="b s" data-action="export-markers-json" title="Экспорт в JSON">⬇</button>
+            <button class="b s" data-action="import-markers" title="Импорт из JSON">⬆</button>
+            <button class="b s" data-action="export-markers-csv" title="Экспорт в CSV">CSV</button>
           </div>
         </div>
         <div class="mfilters" id="mfilters"></div>
         <div class="madd-row">
-          <button class="b" id="maddbtn" onclick="togAddMarker()" title="Поставить маркер кликом по графику">+ Поставить</button>
+          <button class="b" id="maddbtn" data-action="toggle-add-marker" title="Поставить маркер кликом по графику">+ Поставить</button>
           <select class="ai" id="maddtype" style="flex:1;font-size:11px;padding:2px 4px"></select>
         </div>
-        <input type="text" class="ai" id="msearch" placeholder="🔍 Поиск в тексте..." style="margin-bottom:4px;font-size:11px;padding:3px 5px" oninput="setMarkerSearch(this.value)" />
+        <input type="text" class="ai" id="msearch" placeholder="🔍 Поиск в тексте..." style="margin-bottom:4px;font-size:11px;padding:3px 5px" data-input="marker-search" />
         <div class="mlist" id="mlist"></div>
         <div style="display:flex;gap:3px;margin-top:4px">
-          <button class="b s" style="flex:1" onclick="clearAllMarkers()" title="Удалить ВСЕ маркеры" style="color:#f87171">🗑 Очистить маркеры</button>
+          <button class="b s marker-clear-btn" data-action="clear-markers" title="Удалить ВСЕ маркеры">🗑 Очистить маркеры</button>
         </div>
       </div>
       <div>
         <div class="lbl">Отображение</div>
-        <div class="cr"><button class="b on" id="bovr" onclick="setM('o')">Вместе</button><button class="b" id="bspl" onclick="setM('s')">Раздельно</button></div>
-        <div class="cr"><button class="b on" id="bts" onclick="setPlotMode('ts')">Время</button><button class="b" id="bxy" onclick="setPlotMode('xy')">X-Y</button></div>
+        <div class="cr"><button class="b on" id="bovr" data-action="set-display-mode" data-mode="o">Вместе</button><button class="b" id="bspl" data-action="set-display-mode" data-mode="s">Раздельно</button></div>
+        <div class="cr"><button class="b on" id="bts" data-action="set-plot-mode" data-mode="ts">Время</button><button class="b" id="bxy" data-action="set-plot-mode" data-mode="xy">X-Y</button></div>
         <div id="xysec" style="display:none">
           <div class="lbl">Ось X (параметр)</div>
-          <select class="ai" id="xysel" onchange="setXYParam(this.value)" style="width:100%;font-size:12px;padding:3px 5px"></select>
+          <select class="ai" id="xysel" data-change="xy-param" style="width:100%;font-size:12px;padding:3px 5px"></select>
         </div>
-        <div class="cr"><button class="b on" id="bcg" onclick="togCgaps()">Склейка</button><button class="b on" id="brs" onclick="togRslider()" title="Мини-слайдер под графиком для быстрой навигации по времени">Миникарта</button></div>
-        <div class="cr"><button class="b" id="bqgood" onclick="togQualityFilter()" title="Исключить точки с non-good status из графиков, статистики, сглаживания и аномалий">✓ Good</button></div>
+        <div class="cr"><button class="b on" id="bcg" data-action="toggle-connect-gaps">Склейка</button><button class="b on" id="brs" data-action="toggle-range-slider" title="Мини-слайдер под графиком для быстрой навигации по времени">Миникарта</button></div>
+        <div class="cr"><button class="b" id="bqgood" data-action="toggle-quality-filter" title="Исключить точки с non-good status из графиков, статистики, сглаживания и аномалий">✓ Good</button></div>
         <div>
           <div class="lbl">Сглаживание</div>
-          <div class="cr"><button class="b on" id="smNone" onclick="setSmooth('none')">Нет</button><button class="b" id="smSpline" onclick="setSmooth('spline')">Сплайн</button><button class="b" id="smMavg" onclick="setSmooth('mavg')">СС</button><button class="b" id="smEma" onclick="setSmooth('ema')">EMA</button></div>
-          <div class="cr"><button class="b" id="smGauss" onclick="setSmooth('gauss')">Гаусс</button><button class="b" id="smSg" onclick="setSmooth('sg')">Сав-Гол</button><button class="b" id="smOrig" onclick="togSmoothOrig()">👁 Исход.</button></div>
-          <div id="smoothSliderSec" style="display:none"><div class="lbl" id="smlbl">Сила: 30</div><input type="range" min="1" max="100" value="30" step="1" id="smsl" oninput="setSmoothStr(this.value)"/><div style="font-size:10px;opacity:0.35" id="smdetail"></div></div>
+          <div class="cr"><button class="b on" id="smNone" data-action="set-smooth" data-mode="none">Нет</button><button class="b" id="smSpline" data-action="set-smooth" data-mode="spline">Сплайн</button><button class="b" id="smMavg" data-action="set-smooth" data-mode="mavg">СС</button><button class="b" id="smEma" data-action="set-smooth" data-mode="ema">EMA</button></div>
+          <div class="cr"><button class="b" id="smGauss" data-action="set-smooth" data-mode="gauss">Гаусс</button><button class="b" id="smSg" data-action="set-smooth" data-mode="sg">Сав-Гол</button><button class="b" id="smOrig" data-action="toggle-smooth-original">👁 Исход.</button></div>
+          <div id="smoothSliderSec" style="display:none"><div class="lbl" id="smlbl">Сила: 30</div><input type="range" min="1" max="100" value="30" step="1" id="smsl" data-input="smooth-strength"/><div style="font-size:10px;opacity:0.35" id="smdetail"></div></div>
         </div>
         <div>
           <div class="lbl">Прореживание</div>
-          <div class="cr"><button class="b on" id="dsLttb" onclick="setDS('lttb')">LTTB</button><button class="b" id="dsMinmax" onclick="setDS('minmax')">Мин-Макс</button><button class="b" id="dsNth" onclick="setDS('nth')">Каждая N</button></div>
+          <div class="cr"><button class="b on" id="dsLttb" data-action="set-downsample" data-mode="lttb">LTTB</button><button class="b" id="dsMinmax" data-action="set-downsample" data-mode="minmax">Мин-Макс</button><button class="b" id="dsNth" data-action="set-downsample" data-mode="nth">Каждая N</button></div>
         </div>
-        <div class="cr"><button class="b" id="banom" onclick="togAnomaly()">⚡ Аномалии</button><button class="b" id="bt0" onclick="togT0()">T=0</button></div>
+        <div class="cr"><button class="b" id="banom" data-action="toggle-anomaly">⚡ Аномалии</button><button class="b" id="bt0" data-action="toggle-t0">T=0</button></div>
       </div>
       <div id="anomsec" style="display:none">
         <div class="lbl">Аномалии (Боллинджер)</div>
-        <div class="ar"><span style="font-size:11px;opacity:0.45;white-space:nowrap">Окно:</span><input class="ai" id="anomW" type="number" value="20" min="3" max="200" style="width:50px" onchange="render()"/><span style="font-size:11px;opacity:0.45;white-space:nowrap">σ:</span><input class="ai" id="anomK" type="number" value="2" min="0.5" max="5" step="0.5" style="width:50px" onchange="render()"/></div>
+        <div class="ar"><span style="font-size:11px;opacity:0.45;white-space:nowrap">Окно:</span><input class="ai" id="anomW" type="number" value="20" min="3" max="200" style="width:50px" data-change="render"/><span style="font-size:11px;opacity:0.45;white-space:nowrap">σ:</span><input class="ai" id="anomK" type="number" value="2" min="0.5" max="5" step="0.5" style="width:50px" data-change="render"/></div>
       </div>
       <div id="t0sec" style="display:none">
         <div class="lbl">Сравнение T=0</div>
         <div style="font-size:11px;opacity:0.45;margin-bottom:3px">Кликни по графику для установки T=0</div>
         <div style="font-size:12px;opacity:0.65" id="t0info">Не установлено</div>
-        <button class="b s" style="margin-top:3px" onclick="resetT0()">Сбросить T=0</button>
+        <button class="b s" style="margin-top:3px" data-action="reset-t0">Сбросить T=0</button>
       </div>
       <div>
         <div class="lbl">Ось Y (раздельный режим)</div>
-        <div class="ar"><input class="ai" id="ymn" type="text" placeholder="Min" oninput="onYR()" /><span style="opacity:0.3">-</span><input class="ai" id="ymx" type="text" placeholder="Max" oninput="onYR()" /></div>
-        <button class="b s" style="margin-top:3px" onclick="rstY()">Авто Y</button>
+        <div class="ar"><input class="ai" id="ymn" type="text" placeholder="Min" data-input="y-range" /><span style="opacity:0.3">-</span><input class="ai" id="ymx" type="text" placeholder="Max" data-input="y-range" /></div>
+        <button class="b s" style="margin-top:3px" data-action="reset-y">Авто Y</button>
       </div>
       <div class="shortcut-hint">📏 Измерение: клик1=▸A · клик2=◆B · тяни=двигать<br/>Маркеры: тип → «+ Поставить» → клик · <kbd>[</kbd><kbd>]</kbd>=прыжок<br/>Список параметров: клик=вкл/выкл · Shift+клик=только этот<br/>⇌ рядом с единицами = конверсия (°C↔°F, bar↔psi и т.п.)<br/>Зум: колесо · двойной клик=сброс · <kbd>Alt</kbd>+<kbd>←</kbd>/<kbd>→</kbd>=откат/повтор<br/>T=0: клик=точка выравнивания · Esc=отмена · F1=справка</div>
     </div>
-    <div id="ca" ondrop="onDrop(event)" ondragover="onDgOv(event)" ondragleave="onDgLv()">
-      <div id="dz" onclick="fi.click()">
+    <div id="ca">
+      <div id="dz" data-action="open-files">
         <div style="font-size:52px;opacity:.12;margin-bottom:20px">⬆</div>
         <div style="font-size:16px;opacity:0.6;margin-bottom:8px">Перетащи .txt / .log файлы сюда</div>
         <div style="font-size:12px;opacity:0.3;margin-bottom:24px">или нажми, чтобы выбрать</div>
@@ -156,7 +156,7 @@
         <div class="cp-header">
           <span class="cp-info" id="cp-times"></span>
           <span class="cp-delta" id="cp-dt"></span>
-          <button class="b s" onclick="clearCursors()">Убрать курсоры</button>
+          <button class="b s" data-action="clear-cursors">Убрать курсоры</button>
         </div>
         <table>
           <thead>
@@ -173,11 +173,11 @@
 <div id="addhint" class="addhint"></div>
 <div id="umenu" class="umenu"></div>
 <div id="helpmod">
-  <div id="helpbg" onclick="togHelp()"></div>
+  <div id="helpbg" data-action="toggle-help"></div>
   <div id="helpwin">
     <div id="helphdr">
       <span>Справка — PA·GRAPH v__APP_VERSION__</span>
-      <button class="b s" onclick="togHelp()" title="Закрыть (Esc)">✕ Закрыть</button>
+      <button class="b s" data-action="toggle-help" title="Закрыть (Esc)">✕ Закрыть</button>
     </div>
     <div id="helpbody">
       <div class="help-toc">

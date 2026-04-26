@@ -11,9 +11,9 @@ add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment
 add_header Cross-Origin-Opener-Policy "same-origin" always;
 add_header Cross-Origin-Resource-Policy "same-origin" always;
 
-# dist/server загружает Plotly/app/styles из локальных файлов, но HTML пока содержит inline handlers/styles.
-# CSP без unsafe-inline требует отдельного UI-refactor шага: убрать inline onclick/style из шаблона.
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" always;
+# dist/server загружает Plotly/app/styles из локальных файлов. JS event wiring вынесен во внешний app.js;
+# style-src пока разрешает inline styles, потому что Plotly и текущая вёрстка используют style-атрибуты.
+add_header Content-Security-Policy "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" always;
 ```
 
 ## Примечания
@@ -23,4 +23,4 @@ add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsaf
 - `worker-src 'self'` нужен для `parser.worker.js` и `trace.worker.js`.
 - `img-src blob: data:` нужен для PNG-экспорта и Plotly image generation.
 - `connect-src 'none'` фиксирует ожидаемую no-network модель.
-- Чтобы убрать `'unsafe-inline'`, нужно перевести template на `addEventListener`/CSS-классы вместо inline `onclick`/`style`.
+- Чтобы убрать style `'unsafe-inline'`, нужно перевести template style-атрибуты в CSS-классы и отдельно проверить Plotly под такой политикой.

@@ -1,4 +1,4 @@
-# PA-GRAPH / log-graph-v091
+# PA-GRAPH / log-graph
 
 Офлайн-инструмент в браузере для загрузки локальных SCADA/PLC-логов, построения временных рядов, измерений по диапазонам, экспорта CSV/PNG и сохранения переносимых сессий.
 
@@ -7,9 +7,10 @@
 Проект теперь разделён на исходники и сборку:
 
 ```text
-src/                      исходный HTML-шаблон, CSS и app JS
-parser.worker.js          worker парсера
-trace.worker.js           worker подготовки рядов
+src/                      исходный HTML-шаблон, CSS, app JS и workers
+src/parser-core.js        чистое ядро декодирования и парсинга
+src/parser.worker.js      worker парсера
+src/trace.worker.js       worker подготовки рядов
 vendor/                   локальный Plotly для офлайна
 tools/                    build-инструменты
 tests/                    regression-тесты
@@ -31,11 +32,11 @@ cd dist/server
 python -m http.server 8080
 ```
 
-Затем открыть `http://localhost:8080/log-graph-v091.html`.
+Затем открыть `http://localhost:8080/index.html`.
 
 Статическая раздача обязательна для предсказуемой работы workers (`parser.worker.js`, `trace.worker.js`). Прямое открытие HTML больше не является поддерживаемым режимом: оно ломает модель workers и создаёт лишний релизный артефакт.
 
-Единственный source-of-truth для runtime — `src/index.template.html`, `src/styles.css`, `src/app.js`, два worker-файла и `package.json` с версией. `dist/server` пересобирается командой `npm run build`; руками его не править. В `dist/server/build-manifest.json` записываются SHA-256 исходников, а `npm test` проверяет, что server-HTML подключает внешний `app.js`.
+Единственный source-of-truth для runtime — `src/index.template.html`, `src/styles.css`, `src/app.js`, `src/parser-core.js`, worker-файлы в `src/` и `package.json` с версией. `dist/server` пересобирается командой `npm run build`; руками его не править. В `dist/server/build-manifest.json` записываются SHA-256 исходников, а `npm test` проверяет, что server-HTML подключает внешний `app.js`.
 
 ### Минимальный переносимый комплект
 
@@ -43,9 +44,10 @@ python -m http.server 8080
 
 ```text
 dist/server/
-log-graph-v091.html
+index.html
 styles.css
 app.js
+parser-core.js
 parser.worker.js
 trace.worker.js
 build-manifest.json

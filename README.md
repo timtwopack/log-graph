@@ -9,14 +9,15 @@ npm run build
 powershell -ExecutionPolicy Bypass -File .\serve-local.ps1
 ```
 
-Откроется `http://127.0.0.1:8765/log-graph-v091.html`.
+Откроется `http://127.0.0.1:8765/index.html`.
 
 ## Структура
 
 ```text
-src/                 исходный HTML-шаблон, CSS и app JS
-parser.worker.js     worker парсинга логов
-trace.worker.js      worker подготовки рядов
+src/                 исходный HTML-шаблон, CSS, app JS и workers
+src/parser-core.js   чистое ядро декодирования и парсинга
+src/parser.worker.js worker парсинга логов
+src/trace.worker.js  worker подготовки рядов
 vendor/              локальные browser-зависимости для офлайна
 tools/               build-инструменты
 tests/               Node regression-тесты

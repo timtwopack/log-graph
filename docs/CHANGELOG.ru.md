@@ -4,6 +4,7 @@
 
 - Добавлена загрузка файлов с определением кодировки: UTF-8, Windows-1251, UTF-16LE и UTF-16BE.
 - Декодирование и парсинг вынесены в `parser.worker.js` для запуска через статический сервер.
+- Ядро парсера выделено в `src/parser-core.js`, worker оставлен тонкой обвязкой.
 - Удалены дублирующие main-thread/blob fallback-парсеры; импорт теперь требует статической раздачи.
 - Добавлен `trace.worker.js` для предварительного фонового downsampling/cache warmup.
 - Значения `status` из grouped-формата сохраняются по каждой точке.
@@ -27,4 +28,5 @@
 - Добавлен `tools/build.mjs`, который собирает единственный штатный server-runtime.
 - Добавлен `build-manifest.json` с SHA-256 исходников и тесты, проверяющие отсутствие drift между source и server-runtime.
 - Версия приложения теперь подставляется из `package.json` во время сборки.
+- Runtime entrypoint теперь `index.html`; старые versioned standalone-имена считаются legacy.
 - Portable zip теперь является только упаковкой штатного server-runtime с `serve-local.ps1`.
