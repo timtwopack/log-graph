@@ -37,7 +37,8 @@ if ($IncludeSamples) {
 }
 
 if (Test-Path $ZipPath) { Remove-Item -LiteralPath $ZipPath -Force }
-Compress-Archive -LiteralPath (Join-Path $BundleDir '*') -DestinationPath $ZipPath -Force
+$Items = Get-ChildItem -LiteralPath $BundleDir -Force
+Compress-Archive -LiteralPath $Items.FullName -DestinationPath $ZipPath -Force
 
 Write-Host "Portable folder: $BundleDir"
 Write-Host "Portable zip   : $ZipPath"
