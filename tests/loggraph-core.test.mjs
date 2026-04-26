@@ -350,21 +350,16 @@ test('trace worker payload reuses shared columnar buffers without transfer', () 
   assert.equal(transfer.length, 0);
 });
 
-test('plot trace type avoids WebGL for normal downsampled series and falls back without WebGL', () => {
-  const noWebgl = loadAppCore(
-    ['plotlyWebGlAvailable', 'traceTypeForPointCount', 'isPlotlyWebGlError'],
-    "const WEBGL_THRESHOLD = 20000;\nconst S = {runtime:{WEBGL_SUPPORTED:null, WEBGL_FAILURE_MESSAGE:''}};\nconst document = {createElement: () => ({getContext: () => null})};"
+test('plot traces use one SVG type and cap data before Plotly', () => {
+  const app = loadAppCore(
+    ['downsample', 'downsampleMinMax', 'downsampleMinMaxLttb', 'capPlotPoints'],
+    "const PLOT_TRACE_TYPE = 'scatter';"
   );
-  assert.equal(noWebgl.traceTypeForPointCount(5000), 'scatter');
-  assert.equal(noWebgl.traceTypeForPointCount(50000), 'scatter');
-  assert.equal(noWebgl.isPlotlyWebGlError(new Error('WebGL is not supported by your browser')), true);
-
-  const withWebgl = loadAppCore(
-    ['plotlyWebGlAvailable', 'traceTypeForPointCount'],
-    "const WEBGL_THRESHOLD = 20000;\nconst S = {runtime:{WEBGL_SUPPORTED:null, WEBGL_FAILURE_MESSAGE:''}};\nconst document = {createElement: () => ({getContext: () => ({})})};"
-  );
-  assert.equal(withWebgl.traceTypeForPointCount(5000), 'scatter');
-  assert.equal(withWebgl.traceTypeForPointCount(50000), 'scattergl');
+  const x = Float64Array.from({length: 20000}, (_, i) => i);
+  const y = Float64Array.from({length: 20000}, (_, i) => Math.sin(i / 100));
+  const capped = app.capPlotPoints(x, y, 5000);
+  assert.ok(capped.x.length <= 5002);
+  assert.ok(capped.y.length <= 5002);
 });
 
 test('worker columnar params inflate status, epoch, and time source', () => {

@@ -107,9 +107,7 @@ const S = {
     TRACE_WORKER: null,
     TRACE_WORKER_SEQ: 1,
     TRACE_WORKER_PENDING: {},
-    TRACE_DATA_SEQ: 1,
-    WEBGL_SUPPORTED: null,
-    WEBGL_FAILURE_MESSAGE: ''
+    TRACE_DATA_SEQ: 1
   }
 };
 
@@ -168,10 +166,7 @@ const UNIT_CONVERSIONS = {
 
 const PAL = ["#22d3ee","#f472b6","#a78bfa","#34d399","#fb923c","#facc15","#f87171","#60a5fa","#c084fc","#4ade80","#e879f9","#38bdf8","#fbbf24","#818cf8","#2dd4bf","#fb7185","#a3e635","#f97316","#67e8f9","#d946ef"];
 const MAX_PTS = 5000;
-/* Normal time-series traces are already downsampled to MAX_PTS, so SVG scatter is
-   the safer default on plant laptops where WebGL can be disabled by driver/policy.
-   WebGL is reserved for genuinely larger traces, mainly XY mode. */
-const WEBGL_THRESHOLD = 20000;
+const PLOT_TRACE_TYPE = 'scatter';
 const MAX_INPUT_FILE_BYTES = 8 * 1024 * 1024 * 1024;
 const MAX_STORED_TEXT_BYTES = 25 * 1024 * 1024;
 const TRACE_WORKER_MAX_TRANSFER_BYTES = 256 * 1024 * 1024;
@@ -833,32 +828,6 @@ function recordPerf(name, startMs, extra){
   if(S.runtime.PERF.length > 200) S.runtime.PERF.shift();
   return item;
 }
-function plotlyWebGlAvailable(){
-  if(S.runtime.WEBGL_SUPPORTED === false) return false;
-  if(S.runtime.WEBGL_SUPPORTED === true) return true;
-  try{
-    const canvas = document.createElement('canvas');
-    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-    S.runtime.WEBGL_SUPPORTED = !!gl;
-  }catch(e){
-    S.runtime.WEBGL_SUPPORTED = false;
-    S.runtime.WEBGL_FAILURE_MESSAGE = e && e.message ? e.message : String(e || '');
-  }
-  return S.runtime.WEBGL_SUPPORTED === true;
-}
-function traceTypeForPointCount(pointCount){
-  return pointCount > WEBGL_THRESHOLD && plotlyWebGlAvailable() ? 'scattergl' : 'scatter';
-}
-function isPlotlyWebGlError(error){
-  const msg = error && error.message ? error.message : String(error || '');
-  return /webgl|regl/i.test(msg);
-}
-function disableWebGlForSession(error){
-  S.runtime.WEBGL_SUPPORTED = false;
-  S.runtime.WEBGL_FAILURE_MESSAGE = error && error.message ? error.message : String(error || '');
-  clearTraceCache();
-  showErr('WebGL недоступен, переключаю графики на обычный SVG-режим');
-}
 function exportDiagnostics(){
   const payload = {
     exportedAt: new Date().toISOString(),
@@ -872,10 +841,6 @@ function exportDiagnostics(){
     traceWorker: {
       active: !!S.runtime.TRACE_WORKER,
       pending: Object.keys(S.runtime.TRACE_WORKER_PENDING || {}).length
-    },
-    webgl: {
-      supported: S.runtime.WEBGL_SUPPORTED,
-      failureMessage: S.runtime.WEBGL_FAILURE_MESSAGE || ''
     },
     files: S.data.FN.slice(),
     params: S.data.AP.map(p => ({
@@ -1746,6 +1711,10 @@ function downsampleNth(xArr, yArr, threshold){
   }
   return {x: sx, y: sy};
 }
+function capPlotPoints(xArr, yArr, threshold){
+  if(!xArr || xArr.length <= threshold) return {x: xArr, y: yArr};
+  return downsampleMinMaxLttb(xArr, yArr, threshold);
+}
 
 /* Dispatch to selected algorithm */
 function dsDispatch(xArr, yArr, threshold){
@@ -2320,16 +2289,27 @@ function prepareXYData(xParam, yParams){
     }
     /* Sort by X value for clean characteristic curve */
     pairs.sort((a,b) => a.xv - b.xv);
+    const origPointCount = pairs.length;
+    let x = pairs.map(p => p.xv);
+    let y = pairs.map(p => p.yv);
+    let ts = pairs.map(p => p.ts);
+    if(x.length > MAX_PTS){
+      const capped = capPlotPoints(x, y, MAX_PTS);
+      x = capped.x;
+      y = capped.y;
+      ts = new Array(x.length).fill(null);
+    }
     return {
       name: pn(yP),
       tag: yP.tag,
       color: gc(yP),
-      x: pairs.map(p => p.xv),
-      y: pairs.map(p => p.yv),
-      ts: pairs.map(p => p.ts),
+      x,
+      y,
+      ts,
       lw: S.style.PW[yP.tag] || S.view.LW,
       ld: S.style.PD[yP.tag] || S.view.LDASH,
-      pointCount: pairs.length
+      pointCount: x.length,
+      origPointCount
     };
   });
 }
@@ -2353,7 +2333,7 @@ function buildXYSpec(params, pd, h){
     totalPts += d.pointCount;
     traces.push({
       x: d.x, y: d.y, name: d.name,
-      type: traceTypeForPointCount(d.pointCount),
+      type: PLOT_TRACE_TYPE,
       mode: 'lines+markers',
       line:{color:d.color, width:d.lw, dash:d.ld, shape:'linear'},
       marker:{size:3, color:d.color},
@@ -5564,7 +5544,7 @@ function prepareTraceData(p){
     hit.color = gc(p);
     hit.lw = S.style.PW[p.tag] || S.view.LW;
     hit.ld = S.style.PD[p.tag] || S.view.LDASH;
-    hit.traceType = traceTypeForPointCount(hit.dispLen);
+    hit.traceType = PLOT_TRACE_TYPE;
     return hit;
   }
   const result = _prepareTraceDataImpl(p);
@@ -5578,7 +5558,8 @@ function _prepareTraceDataImpl(p){
   const xMsFull = filtered.x;
   const yFull = filtered.y;
   const stepSignal = isStepSignal(p);
-  const ds = stepSignal ? downsampleDiscrete(xMsFull, yFull) : dsDispatch(xMsFull, yFull, MAX_PTS);
+  const baseDs = stepSignal ? downsampleDiscrete(xMsFull, yFull) : dsDispatch(xMsFull, yFull, MAX_PTS);
+  const ds = capPlotPoints(baseDs.x, baseDs.y, MAX_PTS);
 
   /* When CGAPS is off, insert nulls at genuine session gaps to break the line.
      Uses "natural break" detection: sort intervals, find the biggest ratio jump.
@@ -5686,7 +5667,7 @@ function _prepareTraceDataImpl(p){
     ld: S.style.PD[p.tag] || S.view.LDASH,
     lineShape,
     splineSmoothing,
-    traceType: traceTypeForPointCount(ds.x.length)
+    traceType: PLOT_TRACE_TYPE
   };
 }
 
@@ -5995,11 +5976,6 @@ function _renderChart(cache, isNew){
         refreshCursors();
       }
     }catch(e){
-      if(isPlotlyWebGlError(e) && S.runtime.WEBGL_SUPPORTED !== false){
-        disableWebGlForSession(e);
-        _renderChart(cache, isNew);
-        return;
-      }
       createPlotError(cache.pd, e);
       console.error(e);
     }
