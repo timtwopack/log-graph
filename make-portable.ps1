@@ -1,7 +1,6 @@
 param(
   [string]$OutputDir = (Join-Path $PSScriptRoot 'dist'),
-  [switch]$IncludeSamples,
-  [switch]$IncludeStandalone
+  [switch]$IncludeSamples
 )
 
 $ErrorActionPreference = 'Stop'
@@ -21,7 +20,6 @@ $BundleName = "pa-graph-portable-$Stamp"
 $BundleDir = Join-Path $OutputDir $BundleName
 $ZipPath = Join-Path $OutputDir "$BundleName.zip"
 $ServerDir = Join-Path $PSScriptRoot 'dist\server'
-$StandalonePath = Join-Path $PSScriptRoot 'dist\single-file\log-graph-v091-standalone.html'
 
 if (Test-Path $BundleDir) { Remove-Item -LiteralPath $BundleDir -Recurse -Force }
 New-Item -ItemType Directory -Path $BundleDir | Out-Null
@@ -32,9 +30,6 @@ if (-not (Test-Path (Join-Path $ServerDir 'log-graph-v091.html'))) {
 
 Get-ChildItem -LiteralPath $ServerDir -Force | Copy-Item -Destination $BundleDir -Recurse
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'serve-local.ps1') -Destination (Join-Path $BundleDir 'serve-local.ps1')
-if ($IncludeStandalone -and (Test-Path $StandalonePath)) {
-  Copy-Item -LiteralPath $StandalonePath -Destination (Join-Path $BundleDir 'log-graph-v091-standalone.html')
-}
 
 if ($IncludeSamples) {
   New-Item -ItemType Directory -Path (Join-Path $BundleDir 'data_base') | Out-Null

@@ -3,7 +3,7 @@
 ## 0.9.1-review-hardening
 
 - Added encoding-aware input loader for UTF-8, Windows-1251, UTF-16LE, and UTF-16BE files.
-- Moved file decoding/parsing to `parser.worker.js` for static-server runs, with inline blob fallback for direct file opening.
+- Moved file decoding/parsing to `parser.worker.js` for static-server runs.
 - Added optional `trace.worker.js` precompute path for initial downsampling/cache warmup.
 - Preserved grouped-format `status` values per point.
 - Preserved optional epoch timestamp as `epochUs` and use it as the timestamp source of truth; local date/time columns remain the fallback.
@@ -20,7 +20,7 @@
 - Added session and marker import validation, size limits, and text normalization.
 - Added local diagnostics JSON export with performance samples and runtime errors.
 - Added Node test suite and GitHub Actions workflow.
-- Added `src/`, `dist/server`, and `dist/single-file` structure.
-- Added `tools/build.mjs` to build the primary server runtime and optional standalone HTML.
-- Added `build-manifest.json` with SHA-256 input hashes and tests that guard against source/server/standalone drift.
-- Portable zip now contains only the supported server runtime by default; standalone is included only with `-IncludeStandalone`.
+- Added the `src/`, `docs/`, `review/`, and `dist/server` structure.
+- Added `tools/build.mjs` to build the single supported server runtime.
+- Added `build-manifest.json` with SHA-256 input hashes and tests that guard against source/server drift.
+- Portable zip is now only a package of the supported server runtime plus `serve-local.ps1`.

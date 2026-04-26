@@ -3,7 +3,7 @@
 ## 0.9.1-review-hardening
 
 - Добавлена загрузка файлов с определением кодировки: UTF-8, Windows-1251, UTF-16LE и UTF-16BE.
-- Декодирование и парсинг вынесены в `parser.worker.js` для запуска через статический сервер; для прямого открытия HTML оставлен inline blob fallback.
+- Декодирование и парсинг вынесены в `parser.worker.js` для запуска через статический сервер.
 - Добавлен `trace.worker.js` для предварительного фонового downsampling/cache warmup.
 - Значения `status` из grouped-формата сохраняются по каждой точке.
 - Опциональная epoch-метка сохраняется как `epochUs` и используется как source of truth для времени; локальные колонки `Дата/Время/мс` остаются fallback.
@@ -20,7 +20,7 @@
 - Импорт сессий и маркеров получил validation, size limits и нормализацию текста.
 - Добавлен локальный экспорт диагностики с performance samples и runtime errors.
 - Добавлены Node-тесты и GitHub Actions workflow.
-- Введена структура `src/` + `dist/server` + `dist/single-file`.
-- Добавлен `tools/build.mjs`, который собирает основной server-runtime и опциональный standalone HTML.
-- Добавлен `build-manifest.json` с SHA-256 исходников и тесты, проверяющие отсутствие drift между source, server-runtime и standalone.
-- Portable zip теперь по умолчанию содержит только штатный server-runtime; standalone включается только флагом `-IncludeStandalone`.
+- Введена структура `src/` + `docs/` + `review/` + `dist/server`.
+- Добавлен `tools/build.mjs`, который собирает единственный штатный server-runtime.
+- Добавлен `build-manifest.json` с SHA-256 исходников и тесты, проверяющие отсутствие drift между source и server-runtime.
+- Portable zip теперь является только упаковкой штатного server-runtime с `serve-local.ps1`.

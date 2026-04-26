@@ -10,9 +10,12 @@
 src/                      исходный HTML-шаблон, CSS и app JS
 parser.worker.js          worker парсера
 trace.worker.js           worker подготовки рядов
-dist/server/              основной portable runtime для локального сервера
-dist/single-file/         опциональный аварийный standalone HTML
-log-graph-v091.html       генерируемая root-копия standalone HTML, не штатный режим и не source-of-truth
+vendor/                   локальный Plotly для офлайна
+tools/                    build-инструменты
+tests/                    regression-тесты
+docs/                     документация
+review/                   внешние ревью проекта
+dist/server/              генерируемый статический runtime
 ```
 
 Собрать артефакты:
@@ -24,14 +27,15 @@ npm run build
 Штатный режим — раздать `dist/server` как статический сайт:
 
 ```bash
+cd dist/server
 python -m http.server 8080
 ```
 
 Затем открыть `http://localhost:8080/log-graph-v091.html`.
 
-Статическая раздача обязательна для предсказуемой работы workers (`parser.worker.js`, `trace.worker.js`). Прямое открытие standalone HTML остаётся только аварийным вариантом, когда запуск локального сервера запрещён политикой объекта.
+Статическая раздача обязательна для предсказуемой работы workers (`parser.worker.js`, `trace.worker.js`). Прямое открытие HTML больше не является поддерживаемым режимом: оно ломает модель workers и создаёт лишний релизный артефакт.
 
-Единственный source-of-truth для runtime — `src/index.template.html`, `src/styles.css`, `src/app.js` и два worker-файла. `dist/server`, `dist/single-file` и корневой `log-graph-v091.html` пересобираются командой `npm run build`; руками их не править. В `dist/server/build-manifest.json` записываются SHA-256 исходников, а `npm test` проверяет, что server-HTML подключает внешний `app.js`, а standalone действительно содержит текущий исходник.
+Единственный source-of-truth для runtime — `src/index.template.html`, `src/styles.css`, `src/app.js` и два worker-файла. `dist/server` пересобирается командой `npm run build`; руками его не править. В `dist/server/build-manifest.json` записываются SHA-256 исходников, а `npm test` проверяет, что server-HTML подключает внешний `app.js`.
 
 ### Минимальный переносимый комплект
 
@@ -53,11 +57,7 @@ vendor/
 
 ```text
 serve-local.ps1
-README.ru.md
-RUNBOOK.ru.md
-RELEASE_NOTES.ru.md
-CHANGELOG.ru.md
-SECURITY_HEADERS.ru.md
+docs/
 ```
 
 Папки `tests/`, `.github/`, `data_base/` и файл `package.json` не нужны для работы у конечного пользователя. Они нужны для разработки, CI и проверки.
@@ -82,16 +82,10 @@ powershell -ExecutionPolicy Bypass -File .\serve-local.ps1 -Port 8080
 powershell -ExecutionPolicy Bypass -File .\make-portable.ps1
 ```
 
-Архив появится в `dist/pa-graph-portable-*.zip`. По умолчанию production-логи, sample-файлы и standalone HTML не включаются. Если нужен маленький тестовый sample:
+Архив появится в `dist/pa-graph-portable-*.zip`. Это не отдельная версия приложения, а zip-упаковка того же `dist/server` плюс `serve-local.ps1` для переноса на другой ПК. По умолчанию production-логи и sample-файлы не включаются. Если нужен маленький тестовый sample:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\make-portable.ps1 -IncludeSamples
-```
-
-Если нужен аварийный HTML для двойного клика:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\make-portable.ps1 -IncludeStandalone
 ```
 
 ## Тесты
@@ -109,7 +103,7 @@ npm test
 - ограничение параллельного чтения файлов до 1-2 задач, чтобы не взрывать память на больших логах;
 - маркировку merge-конфликтов по одинаковым `tag + timestamp`;
 - точечную замену только нужных ячеек header при сохранении переименованных тегов;
-- целостность server/standalone артефактов после сборки;
+- целостность server-runtime артефакта после сборки;
 - escaping CSV;
 - отсутствие интерполяции в raw-long CSV;
 - синтаксис и базовую работу workers.
@@ -120,7 +114,7 @@ npm test
 
 ## Эксплуатация
 
-- `RUNBOOK.ru.md` — запуск, восстановление, диагностика и release-checklist.
-- `SECURITY_HEADERS.ru.md` — шаблон заголовков для статического хостинга.
-- `CHANGELOG.ru.md` — список изменений после ревью.
-- `RELEASE_NOTES.ru.md` — краткое описание hardened-сборки.
+- `docs/RUNBOOK.ru.md` — запуск, восстановление, диагностика и release-checklist.
+- `docs/SECURITY_HEADERS.ru.md` — шаблон заголовков для статического хостинга.
+- `docs/CHANGELOG.ru.md` — список изменений после ревью.
+- `docs/RELEASE_NOTES.ru.md` — краткое описание hardened-сборки.

@@ -18,7 +18,7 @@ add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsaf
 
 ## Примечания
 
-- `dist/server` является штатным режимом; `log-graph-v091.html` в корне и `dist/single-file` — generated standalone fallback.
+- `dist/server` является единственным штатным runtime.
 - `worker-src 'self' blob:` нужен для `parser.worker.js`, `trace.worker.js` и fallback-workers.
 - `img-src blob: data:` нужен для PNG-экспорта и Plotly image generation.
 - `connect-src 'none'` фиксирует ожидаемую no-network модель.

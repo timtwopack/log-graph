@@ -32,22 +32,21 @@ build-manifest.json
 vendor/plotly-3.5.0.min.js
 ```
 
-Рекомендуемый portable-комплект:
+Рекомендуемый комплект для zip-переноса:
 
 ```text
 log-graph-v091.html
+styles.css
+app.js
 parser.worker.js
 trace.worker.js
+build-manifest.json
 serve-local.ps1
 vendor/plotly-3.5.0.min.js
-README.ru.md
-RUNBOOK.ru.md
-RELEASE_NOTES.ru.md
-CHANGELOG.ru.md
-SECURITY_HEADERS.ru.md
+docs/
 ```
 
-Не класть в portable-архив реальные технологические логи, если их не нужно передавать явно. Сессии лучше переносить отдельными `.pagraph.json.gz` через меню приложения.
+Portable zip не является отдельной сборкой и не содержит другой runtime. Это обычный `dist/server`, упакованный вместе с `serve-local.ps1`, чтобы на объекте не вспоминать состав файлов. Не класть в архив реальные технологические логи, если их не нужно передавать явно. Сессии лучше переносить отдельными `.pagraph.json.gz` через меню приложения.
 
 ## Windows-развёртывание в командировке
 
@@ -84,7 +83,7 @@ python3 -m http.server 8765
 pwsh ./serve-local.ps1
 ```
 
-Если на объекте нельзя запускать локальный сервер, нужен заранее собранный standalone HTML через `make-portable.ps1 -IncludeStandalone`. Это fallback-режим: приложение должно работать, но внешний `trace.worker.js` не будет использоваться, а поведение blob-worker зависит от политики браузера.
+Если на объекте нельзя запускать локальный сервер, этот проект в штатном виде использовать нельзя: workers и статическая модель поставки требуют HTTP-origin. Для таких объектов лучше заранее согласовать запуск `serve-local.ps1` или штатный внутренний HTTP-сервер.
 
 ## Проверка
 

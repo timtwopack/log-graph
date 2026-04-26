@@ -26,8 +26,8 @@ This build focuses on production-readiness issues found in the review of `log-gr
 - Marker import validates array shape and limits item count.
 - Browser persistent storage is requested before saving sessions.
 - Test suite and CI workflow are included.
-- Build artifact integrity is checked through `build-manifest.json` and tests that compare generated artifacts with source files.
+- Build artifact integrity is checked through `build-manifest.json` and tests that compare generated server-runtime files with source files.
 
 ## Compatibility
 
-Directly opening `log-graph-v091.html` is still supported only as the generated standalone fallback. The supported runtime is static serving of `dist/server`.
+Directly opening HTML is no longer a supported runtime mode. The supported runtime is static serving of `dist/server`.

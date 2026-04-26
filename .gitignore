@@ -4,6 +4,7 @@ node_modules/
 # Build output and generated portable packages
 dist/
 *.zip
+# Legacy root standalone artifact from older builds; current runtime lives in dist/server.
 log-graph-v091.html
 
 # Local input logs and plant data.

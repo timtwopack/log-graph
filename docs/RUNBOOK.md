@@ -2,7 +2,7 @@
 
 ## Local Launch
 
-Build first, then serve `dist/server` as static files. Direct browser opening is only the generated standalone fallback.
+Build first, then serve `dist/server` as static files. Direct browser opening is not a supported runtime mode.
 
 ```bash
 cd dist/server

@@ -6,7 +6,6 @@ import vm from 'node:vm';
 
 const appSource = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
 const styleSource = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
-const rootHtml = readFileSync(new URL('../log-graph-v091.html', import.meta.url), 'utf8');
 const serverHtml = readFileSync(new URL('../dist/server/log-graph-v091.html', import.meta.url), 'utf8');
 const buildManifest = JSON.parse(readFileSync(new URL('../dist/server/build-manifest.json', import.meta.url), 'utf8'));
 
@@ -46,22 +45,17 @@ test('main inline script is syntactically valid', () => {
   new Function(mainScript());
 });
 
-test('build emits server and standalone variants', () => {
+test('build emits the static-server runtime', () => {
   assert.match(serverHtml, /<link rel="stylesheet" href="styles\.css" \/>/);
   assert.match(serverHtml, /<script src="app\.js"><\/script>/);
   assert.doesNotMatch(serverHtml, /function parseTextCore/);
-  assert.match(rootHtml, /<style>/);
-  assert.match(rootHtml, /vendor\/plotly-3\.5\.0\.min\.js|plotly\.js v/i);
-  assert.match(rootHtml, /function parseTextCore/);
 });
 
-test('build manifest and standalone embed the current source files', () => {
+test('build manifest matches the current source files', () => {
   assert.equal(buildManifest.entrypoint, 'log-graph-v091.html');
   assert.equal(buildManifest.sources['src/index.template.html'], sha256(serverHtml));
   assert.equal(buildManifest.sources['src/styles.css'], sha256(styleSource));
   assert.equal(buildManifest.sources['src/app.js'], sha256(appSource));
-  assert.ok(rootHtml.includes(styleSource));
-  assert.ok(rootHtml.includes(appSource));
 });
 
 test('external parser worker is syntactically valid', () => {

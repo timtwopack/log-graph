@@ -18,7 +18,7 @@ add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsaf
 
 ## Notes
 
-- `dist/server` is the supported runtime; root `log-graph-v091.html` and `dist/single-file` are generated standalone fallbacks.
+- `dist/server` is the single supported runtime.
 - `worker-src 'self' blob:` is required for `parser.worker.js`, `trace.worker.js`, and fallback workers.
 - `img-src blob: data:` is required for PNG export and Plotly image generation.
 - `connect-src 'none'` documents the intended no-network posture.
