@@ -12,7 +12,8 @@
 - Parser results are transferred from `parser.worker.js` as columnar typed arrays through a transfer-list; the main thread inflates them into the current UI data structure.
 - Main-state now uses `ColumnarData`: `S.data.AP[].data` is no longer a point-object array, while keeping an array-like API for existing UI code.
 - The internal `parser-core.js` buffer no longer accumulates `{ts,val}` objects and writes points into a columnar store instead.
-- Optional `trace.worker.js` precompute now skips large datasets to avoid structured-cloning hundreds of thousands of point objects immediately after import.
+- Optional `trace.worker.js` precompute now receives cloned typed arrays through a transfer-list; very large selected datasets are skipped by a byte guard to avoid doubling hundreds of MiB immediately after import.
+- Hot render/export/XY/statistics/session snapshot/unit conversion paths now read and write columns directly without temporary `{ts,val,...}` object arrays.
 - Expanded encoding sniffing to 64 KiB so short binary/ASCII prefixes do not dominate UTF-8/CP1251/UTF-16 detection.
 - Preserved grouped-format `status` values per point.
 - Preserved optional epoch timestamp as `epochUs` and use it as the timestamp source of truth; local date/time columns remain the fallback.

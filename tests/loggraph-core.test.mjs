@@ -54,11 +54,26 @@ function loadAppCore(names, prefix = '') {
     'createColumnarPoint',
     'createColumnarData',
     'isColumnarData',
+    'columnarValue',
+    'columnarSetValue',
+    'columnarDeleteValue',
+    'columnarHasField',
+    'columnarCount',
+    'columnarFilteredXY',
+    'columnarTraceWorkerPayload',
     'columnarDataFromPoints',
     'columnarDataFromSeries',
     'ensureColumnarParam'
   ];
-  const needsColumnar = names.some(name => ['inflateWorkerParams', 'mergeParsedParams'].includes(name));
+  const needsColumnar = names.some(name => columnarDeps.includes(name) || [
+    'inflateWorkerParams',
+    'mergeParsedParams',
+    'detectSignalKind',
+    'detectDiscrete',
+    'hasBadQuality',
+    'filt',
+    'prepareXYData'
+  ].includes(name));
   const expanded = needsColumnar ? [...columnarDeps, ...names] : names;
   return loadFromSource(appSource, Array.from(new Set(expanded)), prefix);
 }
@@ -225,6 +240,31 @@ test('external parser worker parses sample log', async () => {
   assert.equal(posted.text, '');
 });
 
+test('trace worker payload transfers cloned columnar buffers', () => {
+  const app = loadAppCore([
+    'createColumnarData',
+    'columnarSetValue',
+    'columnarValue',
+    'columnarTraceWorkerPayload'
+  ]);
+  const data = app.createColumnarData({
+    ts: new Float64Array([1000, 2000]),
+    val: new Float64Array([10, 20])
+  });
+  app.columnarSetValue(data, 0, 'status', 'Bad');
+  const transfer = [];
+  const payload = app.columnarTraceWorkerPayload(data, transfer);
+  assert.deepEqual(Array.from(payload.ts), [1000, 2000]);
+  assert.deepEqual(Array.from(payload.val), [10, 20]);
+  assert.deepEqual(payload.statusValues, ['Bad']);
+  assert.notEqual(payload.ts.buffer, data._cols.ts.buffer);
+  assert.notEqual(payload.val.buffer, data._cols.val.buffer);
+  assert.ok(transfer.includes(payload.ts.buffer));
+  assert.ok(transfer.includes(payload.val.buffer));
+  payload.ts[0] = 9999;
+  assert.equal(app.columnarValue(data, 0, 'ts'), 1000);
+});
+
 test('worker columnar params inflate status, epoch, and time source', () => {
   const app = loadAppCore(['inflateWorkerParams', 'isColumnarData']);
   const params = app.inflateWorkerParams({
@@ -260,10 +300,19 @@ test('external trace worker prepares downsampled trace', () => {
     String,
     Array,
     Object,
-    Set
+    Set,
+    Float64Array,
+    Int32Array,
+    Uint8Array
   };
   vm.createContext(ctx);
   vm.runInContext(traceWorkerSource, ctx);
+  const ts = new Float64Array(100);
+  const val = new Float64Array(100);
+  for(let i = 0; i < 100; i++){
+    ts[i] = i * 100;
+    val[i] = Math.sin(i);
+  }
   ctx.self.onmessage({ data: { items: [{
     key: 'k',
     param: {
@@ -273,7 +322,7 @@ test('external trace worker prepares downsampled trace', () => {
       color: '#fff',
       lw: 1,
       ld: 'solid',
-      data: Array.from({ length: 100 }, (_, i) => ({ ts: i * 100, val: Math.sin(i) }))
+      dataColumnar: {ts, val, statusCodes: null, statusValues: []}
     },
     view: { tr: null, qualityGoodOnly: false, dsAlg: 'minmax', maxPts: 20, cgaps: true, t0ms: null }
   }] } });
@@ -491,5 +540,6 @@ test('raw-long export branch does not interpolate synthetic values', () => {
   assert.ok(start > 0 && end > start, 'raw-long branch is found');
   const branch = src.slice(start, end);
   assert.doesNotMatch(branch, /interpY|interpStep|dsDispatch|downsample/);
-  assert.match(branch, /d\.status/);
+  assert.doesNotMatch(branch, /for\(const d of p\.data\)/);
+  assert.match(branch, /columnarValue\(data, i, 'status'\)/);
 });

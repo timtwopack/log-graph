@@ -12,7 +12,8 @@
 - Результат парсинга передаётся из `parser.worker.js` колоночными typed arrays через transfer-list; main thread распаковывает их в текущую структуру UI.
 - Main-state переведён на `ColumnarData`: `S.data.AP[].data` больше не является массивом point-objects, но сохраняет array-like API для существующего UI-кода.
 - Внутренний буфер `parser-core.js` больше не накапливает `{ts,val}` объекты, а пишет точки в колоночный store.
-- Optional precompute в `trace.worker.js` пропускается для больших наборов, чтобы не structured-clone-ить сотни тысяч point-objects сразу после импорта.
+- Optional precompute в `trace.worker.js` получает cloned typed arrays через transfer-list; для слишком больших выбранных наборов действует byte-guard, чтобы не удваивать сотни MiB памяти сразу после импорта.
+- Горячие пути render/export/XY/statistics/session snapshot/unit conversion переведены на прямое чтение/запись колонок без временного массива `{ts,val,...}` объектов.
 - Расширено окно определения кодировки до 64 KiB, чтобы короткий бинарный/ASCII-префикс не ломал выбор UTF-8/CP1251/UTF-16.
 - Значения `status` из grouped-формата сохраняются по каждой точке.
 - Опциональная epoch-метка сохраняется как `epochUs` и используется как source of truth для времени; локальные колонки `Дата/Время/мс` остаются fallback.

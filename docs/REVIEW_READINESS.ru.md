@@ -32,7 +32,9 @@ powershell -ExecutionPolicy Bypass -File .\serve-local.ps1
 - Parser и main-state используют `ColumnarData`: `ts/val` хранятся в `Float64Array`, boolean-флаги в `Uint8Array`, строковые поля в dictionary-coded колонках.
 - Worker возвращает результат парсинга колоночными typed arrays через transfer-list; main thread больше не хранит базовые точки как массив `{ts,val,...}` объектов.
 - Полный raw text хранится только до 25 MiB; для больших файлов отключено сохранение исходника с переименованными тегами.
-- Optional precompute в `trace.worker.js` пропускает большие наборы, чтобы не structured-clone-ить point-objects сразу после импорта.
+- Optional precompute в `trace.worker.js` получает cloned typed arrays через transfer-list; для очень больших выбранных наборов есть byte-guard, чтобы не удваивать сотни MiB памяти.
+- Render/export/XY/statistics/session snapshot/unit conversion читают и пишут колонки напрямую, без временных point-object массивов.
+- Merge сохраняет conflict-аудит, но базовые ряды после merge снова складываются в `ColumnarData`.
 - Sniff кодировки расширен до 64 KiB.
 - Epoch-колонка wide-лога определяется по нескольким начальным строкам.
 - Двузначные годы нормализуются по окну `00..69 => 2000..2069`, `70..99 => 1970..1999`.
@@ -41,14 +43,14 @@ powershell -ExecutionPolicy Bypass -File .\serve-local.ps1
 
 ## Сознательные tradeoff-ы
 
-- Для снижения риска `ColumnarData` оставляет array-like API (`length`, индекс, `map/filter/some`, итератор). Часть UI-кода всё ещё выглядит как работа с массивом, но под ним лежат колонки.
+- Для снижения риска `ColumnarData` оставляет array-like API (`length`, индекс, `map/filter/some`, итератор). Этот API нужен для совместимости и тестов; производительные пути переведены на прямую работу с колонками.
 - Plotly оставлен как chart engine из-за текущего набора функций. Миграция на uPlot/eCharts имеет смысл отдельным spike-проектом.
 - Classic workers оставлены ради простого статического runtime без bundler. Module workers можно рассмотреть позже, но это не блокирует локальную эксплуатацию.
 - Security hardening не является приоритетом проекта, если он ухудшает читаемость или производительность. Проект рассчитан на локальные доверенные логи.
+- Настоящий zero-copy trace-worker без копии main-state буферов потребует отдельной архитектуры worker-owned state или `SharedArrayBuffer` с COOP/COEP; текущий вариант не detaches main buffers и ограничивает лишнюю копию byte-guard-ом.
 
 ## Оставшиеся крупные темы
 
-- Убрать оставшиеся временные object materialization в отдельных операциях (`filter/map` при экспорте, trace-precompute, merge) и постепенно переводить их на прямую работу с колонками.
 - Прототип альтернативного chart engine для рядов больше миллиона точек на параметр.
 - Бенчмарки памяти/скорости на синтетическом логе 500 MiB+ и реальном объектном логе.
 - Отдельная стратегия для UTC/local wall-clock времени, если появятся логи без epoch из разных часовых поясов.

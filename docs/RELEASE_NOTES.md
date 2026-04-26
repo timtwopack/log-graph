@@ -22,7 +22,8 @@ This build focuses on production-readiness issues found in the review of `log-gr
 - The input-file guardrail is now 8 GiB; full source text is retained only for files up to 25 MiB.
 - Parser results leave the worker as columnar typed arrays through a transfer-list, avoiding structured clone of the full point-object tree.
 - Main application state now stores points through `ColumnarData` instead of object arrays.
-- Background trace precompute skips large datasets to avoid creating temporary object arrays immediately after import.
+- Background trace precompute sends cloned typed arrays to `trace.worker.js` through a transfer-list; a byte guard skips very large selected datasets to avoid doubling hundreds of MiB.
+- Render/export/XY/statistics/session snapshot/unit conversion paths now work directly on columns and no longer build temporary point-object arrays in those paths.
 - Multi-file loading is bounded to one or two concurrent parse jobs to reduce large-log memory peaks.
 - Initial trace downsampling can be precomputed in `trace.worker.js` when served over HTTP.
 - Added `MinMaxLTTB` downsampling for long series with short peaks.

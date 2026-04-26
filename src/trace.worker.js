@@ -103,19 +103,45 @@ function isBadQuality(status){
 function isStepKind(k){
   return k === 'binary' || k === 'step' || k === 'setpoint';
 }
+function columnarStatusAt(data, index){
+  if(!data || !data.statusCodes || !data.statusValues) return '';
+  const code = data.statusCodes[index];
+  return code >= 0 ? data.statusValues[code] : '';
+}
+function filteredXYFromParam(p, view){
+  const data = p.dataColumnar;
+  if(!data || !data.ts || !data.val){
+    return {x: new Float64Array(0), y: new Float64Array(0), length: 0};
+  }
+  const tsArr = data.ts;
+  const valArr = data.val;
+  let count = 0;
+  for(let i = 0; i < tsArr.length; i++){
+    const ts = tsArr[i];
+    if(view.tr && (ts < view.tr[0] || ts > view.tr[1])) continue;
+    if(view.qualityGoodOnly && isBadQuality(columnarStatusAt(data, i))) continue;
+    count++;
+  }
+  const x = new Float64Array(count);
+  const y = new Float64Array(count);
+  let out = 0;
+  for(let i = 0; i < tsArr.length; i++){
+    const ts = tsArr[i];
+    if(view.tr && (ts < view.tr[0] || ts > view.tr[1])) continue;
+    if(view.qualityGoodOnly && isBadQuality(columnarStatusAt(data, i))) continue;
+    x[out] = ts;
+    y[out] = valArr[i];
+    out++;
+  }
+  return {x, y, length: count};
+}
 function prepareOne(req){
   const p = req.param;
   const view = req.view;
   const stepSignal = isStepKind(p.signalKind) || !!p.isDiscrete;
-  const data = [];
-  for(const d of p.data){
-    if(view.tr && (d.ts < view.tr[0] || d.ts > view.tr[1])) continue;
-    if(view.qualityGoodOnly && isBadQuality(d.status)) continue;
-    data.push(d);
-  }
-  const xMsFull = new Array(data.length);
-  const yFull = new Array(data.length);
-  for(let i = 0; i < data.length; i++){ xMsFull[i] = data[i].ts; yFull[i] = data[i].val; }
+  const filtered = filteredXYFromParam(p, view);
+  const xMsFull = filtered.x;
+  const yFull = filtered.y;
   const ds = stepSignal ? downsampleDiscrete(xMsFull, yFull) : dsDispatch(xMsFull, yFull, view.maxPts, view.dsAlg);
   let xFinal = ds.x;
   let yFinal = ds.y;
@@ -155,7 +181,7 @@ function prepareOne(req){
       xDispAreMs: view.t0ms === null,
       yDisp: yFinal,
       yOrig: null,
-      origLen: data.length,
+      origLen: filtered.length,
       dispLen: ds.x.length,
       connectgaps: view.cgaps,
       bollinger: null,
