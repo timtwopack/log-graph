@@ -413,6 +413,41 @@ function _floatColumnSet(cols, name, index, value){
 function _floatColumnDelete(cols, name, index){
   if(cols[name]) cols[name][index] = NaN;
 }
+function _epochRawColumnGet(cols, index){
+  if(cols.epochRaw && cols.epochRawMask && cols.epochRawMask[index]) return String(cols.epochRaw[index]);
+  return _codeColumnGet(cols, 'epochRaw', index);
+}
+function _epochRawColumnSet(cols, index, value){
+  if(value == null || value === ''){
+    _epochRawColumnDelete(cols, index);
+    return;
+  }
+  const s = String(value);
+  if(typeof BigInt === 'function' && typeof BigInt64Array === 'function' && /^-?\d+$/.test(s)){
+    if(!cols.epochRaw) cols.epochRaw = new BigInt64Array(cols.length);
+    if(!cols.epochRawMask) cols.epochRawMask = new Uint8Array(cols.length);
+    try{
+      cols.epochRaw[index] = BigInt(s);
+      cols.epochRawMask[index] = 1;
+      _codeColumnDelete(cols, 'epochRaw', index);
+      return;
+    }catch(_e){}
+  }
+  _codeColumnSet(cols, 'epochRaw', index, s);
+}
+function _epochRawColumnDelete(cols, index){
+  if(cols.epochRawMask) cols.epochRawMask[index] = 0;
+  _codeColumnDelete(cols, 'epochRaw', index);
+}
+function _epochRawColumnHas(cols){
+  if(cols.epochRaw && cols.epochRawMask){
+    for(let i = 0; i < cols.epochRawMask.length; i++) if(cols.epochRawMask[i]) return true;
+  }
+  const codes = cols.epochRawCodes;
+  if(!codes) return false;
+  for(let i = 0; i < codes.length; i++) if(codes[i] >= 0) return true;
+  return false;
+}
 function createColumnarPoint(data, index){
   const cols = data._cols;
   const handler = {
@@ -421,7 +456,7 @@ function createColumnarPoint(data, index){
       if(prop === 'val') return cols.val[index];
       if(prop === 'status') return _codeColumnGet(cols, 'status', index);
       if(prop === 'epochUs') return _floatColumnGet(cols, 'epochUs', index);
-      if(prop === 'epochRaw') return _codeColumnGet(cols, 'epochRaw', index);
+      if(prop === 'epochRaw') return _epochRawColumnGet(cols, index);
       if(prop === 'timeSource') return _codeColumnGet(cols, 'timeSource', index);
       if(prop === 'sourceFile') return _codeColumnGet(cols, 'sourceFile', index);
       if(prop === 'rawVal') return _floatColumnGet(cols, 'rawVal', index);
@@ -433,7 +468,7 @@ function createColumnarPoint(data, index){
       if(prop === 'val'){ cols.val[index] = Number(value); return true; }
       if(prop === 'status'){ _codeColumnSet(cols, 'status', index, value); return true; }
       if(prop === 'epochUs'){ _floatColumnSet(cols, 'epochUs', index, value); return true; }
-      if(prop === 'epochRaw'){ _codeColumnSet(cols, 'epochRaw', index, value); return true; }
+      if(prop === 'epochRaw'){ _epochRawColumnSet(cols, index, value); return true; }
       if(prop === 'timeSource'){ _codeColumnSet(cols, 'timeSource', index, value); return true; }
       if(prop === 'sourceFile'){ _codeColumnSet(cols, 'sourceFile', index, value); return true; }
       if(prop === 'rawVal'){ _floatColumnSet(cols, 'rawVal', index, value); return true; }
@@ -447,7 +482,7 @@ function createColumnarPoint(data, index){
     deleteProperty(_target, prop){
       if(prop === 'status'){ _codeColumnDelete(cols, 'status', index); return true; }
       if(prop === 'epochUs'){ _floatColumnDelete(cols, 'epochUs', index); return true; }
-      if(prop === 'epochRaw'){ _codeColumnDelete(cols, 'epochRaw', index); return true; }
+      if(prop === 'epochRaw'){ _epochRawColumnDelete(cols, index); return true; }
       if(prop === 'timeSource'){ _codeColumnDelete(cols, 'timeSource', index); return true; }
       if(prop === 'sourceFile'){ _codeColumnDelete(cols, 'sourceFile', index); return true; }
       if(prop === 'rawVal'){ _floatColumnDelete(cols, 'rawVal', index); return true; }
@@ -476,7 +511,7 @@ function createColumnarData(input){
     ts: input && input.ts instanceof Float64Array ? input.ts : _cloneFloatArray(input && input.ts, len),
     val: input && input.val instanceof Float64Array ? input.val : _cloneFloatArray(input && input.val, len)
   };
-  for(const name of ['status', 'epochRaw', 'timeSource', 'sourceFile']){
+  for(const name of ['status', 'timeSource', 'sourceFile']){
     const codes = input && input[name + 'Codes'];
     const values = input && input[name + 'Values'];
     if(codes && values){
@@ -484,6 +519,14 @@ function createColumnarData(input){
       cols[name + 'Values'] = Array.from(values);
     }
   }
+  if(input && input.epochRawCodes && input.epochRawValues){
+    cols.epochRawCodes = input.epochRawCodes instanceof Int32Array ? input.epochRawCodes : Int32Array.from(input.epochRawCodes);
+    cols.epochRawValues = Array.from(input.epochRawValues);
+  }
+  if(input && input.epochRaw && typeof BigInt64Array === 'function'){
+    cols.epochRaw = input.epochRaw instanceof BigInt64Array ? input.epochRaw : BigInt64Array.from(input.epochRaw);
+  }
+  if(input && input.epochRawMask) cols.epochRawMask = input.epochRawMask instanceof Uint8Array ? input.epochRawMask : _cloneBoolArray(input.epochRawMask, len);
   if(input && input.epochUs) cols.epochUs = input.epochUs instanceof Float64Array ? input.epochUs : _cloneFloatArray(input.epochUs, len, NaN);
   if(input && input.rawVal) cols.rawVal = input.rawVal instanceof Float64Array ? input.rawVal : _cloneFloatArray(input.rawVal, len, NaN);
   if(input && input.mergeConflict) cols.mergeConflict = input.mergeConflict instanceof Uint8Array ? input.mergeConflict : _cloneBoolArray(input.mergeConflict, len);
@@ -539,7 +582,7 @@ function columnarValue(data, index, field){
   if(field === 'val') return cols.val[index];
   if(field === 'status') return _codeColumnGet(cols, 'status', index);
   if(field === 'epochUs') return _floatColumnGet(cols, 'epochUs', index);
-  if(field === 'epochRaw') return _codeColumnGet(cols, 'epochRaw', index);
+  if(field === 'epochRaw') return _epochRawColumnGet(cols, index);
   if(field === 'timeSource') return _codeColumnGet(cols, 'timeSource', index);
   if(field === 'sourceFile') return _codeColumnGet(cols, 'sourceFile', index);
   if(field === 'rawVal') return _floatColumnGet(cols, 'rawVal', index);
@@ -554,7 +597,11 @@ function columnarSetValue(data, index, field, value){
   const cols = data._cols;
   if(field === 'ts'){ cols.ts[index] = Number(value); return; }
   if(field === 'val'){ cols.val[index] = Number(value); return; }
-  if(field === 'status' || field === 'epochRaw' || field === 'timeSource' || field === 'sourceFile'){
+  if(field === 'epochRaw'){
+    _epochRawColumnSet(cols, index, value);
+    return;
+  }
+  if(field === 'status' || field === 'timeSource' || field === 'sourceFile'){
     _codeColumnSet(cols, field, index, value);
     return;
   }
@@ -573,7 +620,9 @@ function columnarDeleteValue(data, index, field){
     return;
   }
   const cols = data._cols;
-  if(field === 'status' || field === 'epochRaw' || field === 'timeSource' || field === 'sourceFile'){
+  if(field === 'epochRaw'){
+    _epochRawColumnDelete(cols, index);
+  } else if(field === 'status' || field === 'timeSource' || field === 'sourceFile'){
     _codeColumnDelete(cols, field, index);
   } else if(field === 'epochUs' || field === 'rawVal'){
     _floatColumnDelete(cols, field, index);
@@ -591,7 +640,10 @@ function columnarHasField(data, field){
     return false;
   }
   const cols = data._cols;
-  if(field === 'status' || field === 'epochRaw' || field === 'timeSource' || field === 'sourceFile'){
+  if(field === 'epochRaw'){
+    return _epochRawColumnHas(cols);
+  }
+  if(field === 'status' || field === 'timeSource' || field === 'sourceFile'){
     const codes = cols[field + 'Codes'];
     if(!codes) return false;
     for(let i = 0; i < codes.length; i++) if(codes[i] >= 0) return true;
@@ -706,6 +758,7 @@ function columnarDataFromSeries(x, y, extras){
   for(let i = 0; i < len; i++){
     if(extras.status && extras.status[i]) columnarSetValue(data, i, 'status', extras.status[i]);
     if(extras.epochUs && extras.epochUs[i] != null) columnarSetValue(data, i, 'epochUs', extras.epochUs[i]);
+    if(extras.epochRaw && extras.epochRaw[i] != null) columnarSetValue(data, i, 'epochRaw', extras.epochRaw[i]);
     if(extras.rawVal && extras.rawVal[i] != null) columnarSetValue(data, i, 'rawVal', extras.rawVal[i]);
     if(extras.timeSource && extras.timeSource[i]) columnarSetValue(data, i, 'timeSource', extras.timeSource[i]);
     if(extras.mergeConflict && extras.mergeConflict[i]) columnarSetValue(data, i, 'mergeConflict', true);
@@ -1788,13 +1841,10 @@ function inflateWorkerParams(data){
       timeSourceValues: item.timeSourceValues || [],
       sourceFileCodes: item.sourceFileCodes || null,
       sourceFileValues: item.sourceFileValues || [],
-      epochUs: item.epochUs || null
+      epochUs: item.epochUs || null,
+      epochRaw: item.epochRaw || null,
+      epochRawMask: item.epochRawMask || null
     });
-    if(item.epochRaw && item.epochRawMask){
-      for(let i = 0; i < parsedData.length; i++){
-        if(item.epochRawMask[i]) columnarSetValue(parsedData, i, 'epochRaw', String(item.epochRaw[i]));
-      }
-    }
     meta.data = parsedData;
     return meta;
   });

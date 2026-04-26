@@ -52,6 +52,10 @@ function loadAppCore(names, prefix = '') {
     '_floatColumnGet',
     '_floatColumnSet',
     '_floatColumnDelete',
+    '_epochRawColumnGet',
+    '_epochRawColumnSet',
+    '_epochRawColumnDelete',
+    '_epochRawColumnHas',
     'createColumnarPoint',
     'createColumnarData',
     'isColumnarData',
@@ -365,6 +369,8 @@ test('worker columnar params inflate status, epoch, and time source', () => {
   assert.equal(Array.isArray(params[0].data), false);
   assert.equal(app.isColumnarData(params[0].data), true);
   assert.equal(params[0].tag, 'TAG [bar]');
+  assert.ok(params[0].data._cols.epochRaw instanceof BigInt64Array);
+  assert.equal(params[0].data._cols.epochRawValues, undefined);
   assert.equal(params[0].data[0].status, 'GOOD');
   assert.equal(params[0].data[0].epochRaw, '1000000');
   assert.equal(params[0].data[0].timeSource, 'epoch');
